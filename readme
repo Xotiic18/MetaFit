@@ -1,0 +1,19 @@
+MetaFit/
+├── app/                  # Aquí van las pantallas (rutas de la app)
+│   ├── (auth)/           # Pantallas de Login y Registro
+│   ├── (tabs)/           # Pantallas principales con barra de navegación inferior
+│   │   ├── index.tsx     # Dashboard / Inicio
+│   │   ├── workout.tsx   # Registro de entrenamiento (el Logger)
+│   │   └── profile.tsx   # Perfil y objetivos
+│   ├── _layout.tsx       # Configuración global de navegación
+│   └── questionnaire.tsx # El flujo inicial de preguntas
+├── src/                  # Lógica de negocio y componentes reutilizables
+│   ├── components/       # Botones, tarjetas de ejercicios, inputs
+│   ├── api/              # Conexiones a Supabase y Gemini
+│   ├── hooks/            # Lógica personalizada (ej. useAuth, useWorkout)
+│   ├── context/          # Estado global (datos del usuario, rutina actual)
+│   └── utils/            # Funciones de ayuda (formatear fechas, etc.)
+├── assets/               # Imágenes, iconos y fuentes
+├── .env                  # Variables sensibles (Keys de Supabase y Gemini)
+├── tailwind.config.js    # Configuración de NativeWind
+└── package.json          # Dependencias del proyecto
