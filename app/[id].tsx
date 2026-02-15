@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Modal, TextInput, FlatList, Alert, KeyboardAvoidingView, Platform } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+// Asegúrate de que estas rutas sean correctas en tu proyecto
 import { EXERCISE_DATABASE } from '../constants/exercises';
 import { getRoutinesFromStorage, saveRoutinesToStorage } from '../services/storage';
 
@@ -29,6 +30,17 @@ export default function RoutineDetail() {
     await saveRoutinesToStorage(all.map(r => r.id === id ? { ...r, exercises: updatedExercises } : r));
   };
 
+  const addExercise = (exercise) => {
+    const newExercise = {
+      ...exercise,
+      instanceId: Date.now().toString(),
+      sets: [{ id: '1', reps: '', weight: '', rest: '60' }]
+    };
+    const updated = [...selectedExercises, newExercise];
+    saveToStorage(updated);
+    setShowSelector(false);
+  };
+
   const addSet = (instanceId) => {
     const updated = selectedExercises.map(ex => {
       if (ex.instanceId === instanceId) {
@@ -52,19 +64,39 @@ export default function RoutineDetail() {
   };
 
   const removeExercise = (instanceId) => {
-    Alert.alert("Quitar Ejercicio", "¿Quieres eliminarlo?", [
-      { text: "No" },
-      { text: "Sí", style: "destructive", onPress: () => {
+    const confirmar = Platform.OS === 'web' 
+      ? window.confirm("¿Quitar este ejercicio?") 
+      : true;
+
+    if (confirmar) {
+      if (Platform.OS !== 'web') {
+        Alert.alert("Quitar Ejercicio", "¿Quieres eliminarlo?", [
+          { text: "No" },
+          { text: "Sí", style: "destructive", onPress: () => {
+            const updated = selectedExercises.filter(ex => ex.instanceId !== instanceId);
+            saveToStorage(updated);
+          }}
+        ]);
+      } else {
         const updated = selectedExercises.filter(ex => ex.instanceId !== instanceId);
         saveToStorage(updated);
-      }}
-    ]);
+      }
+    }
   };
+
+  const filteredExercises = ALL_EXERCISES.filter(ex => 
+    ex.name.toLowerCase().includes(search.toLowerCase()) || 
+    ex.muscle.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
       <View style={styles.container}>
-        <Stack.Screen options={{ title: name as string, headerTintColor: '#0aff96', headerStyle: { backgroundColor: '#000' } }} />
+        <Stack.Screen options={{ 
+          title: name as string, 
+          headerTintColor: '#A855F7', 
+          headerStyle: { backgroundColor: '#000' } 
+        }} />
         
         <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 120 }}>
           {selectedExercises.map((ex) => (
@@ -80,7 +112,6 @@ export default function RoutineDetail() {
                 </TouchableOpacity>
               </View>
 
-              {/* TABLA DE SERIES */}
               <View style={styles.tableHeader}>
                 <Text style={[styles.colLabel, { flex: 1 }]}>SET</Text>
                 <Text style={[styles.colLabel, { flex: 2 }]}>REPS</Text>
@@ -119,7 +150,7 @@ export default function RoutineDetail() {
               ))}
 
               <TouchableOpacity style={styles.addSetRow} onPress={() => addSet(ex.instanceId)}>
-                <Ionicons name="add-circle-outline" size={20} color="#0aff96" />
+                <Ionicons name="add-circle-outline" size={20} color="#A855F7" />
                 <Text style={styles.addSetText}>Añadir Serie</Text>
               </TouchableOpacity>
             </View>
@@ -131,31 +162,61 @@ export default function RoutineDetail() {
           <Text style={styles.searchBtnText}>BUSCAR EJERCICIO</Text>
         </TouchableOpacity>
 
-        {/* El Modal de búsqueda se mantiene igual que antes */}
+        {/* MODAL DE BÚSQUEDA CORREGIDO */}
+        <Modal visible={showSelector} animationType="slide" transparent={false}>
+          <View style={[styles.container, { paddingTop: 50 }]}>
+            <View style={styles.modalHeader}>
+              <TextInput 
+                style={styles.searchInput}
+                placeholder="Buscar ejercicio o músculo..."
+                placeholderTextColor="#94A3B8"
+                value={search}
+                onChangeText={setSearch}
+                autoFocus
+              />
+              <TouchableOpacity onPress={() => setShowSelector(false)} style={styles.closeBtn}>
+                <Text style={{ color: '#A855F7', fontWeight: 'bold' }}>Cerrar</Text>
+              </TouchableOpacity>
+            </View>
+            <FlatList 
+              data={filteredExercises}
+              keyExtractor={(item, index) => index.toString()}
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.exerciseItem} onPress={() => addExercise(item)}>
+                  <Image source={{ uri: item.gif }} style={styles.miniGif} />
+                  <View>
+                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>{item.name}</Text>
+                    <Text style={{ color: '#A855F7', fontSize: 12 }}>{item.muscle}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        </Modal>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000' },
-  exBox: { backgroundColor: '#1c1c1e', padding: 15, borderRadius: 20, marginBottom: 20 },
-  exHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 15 },
-  exGif: { width: 45, height: 45, borderRadius: 8, marginRight: 12, backgroundColor: '#fff' },
-  exName: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-  exMuscle: { color: '#0aff96', fontSize: 11, fontWeight: 'bold' },
-  
-  tableHeader: { flexDirection: 'row', marginBottom: 10, paddingHorizontal: 5 },
-  colLabel: { color: '#555', fontSize: 10, fontWeight: 'bold', textAlign: 'center' },
-  
-  setRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-  setNum: { color: '#fff', flex: 1, textAlign: 'center', fontWeight: 'bold' },
-  input: { backgroundColor: '#2c2c2e', color: '#fff', flex: 2, padding: 8, borderRadius: 8, textAlign: 'center', fontSize: 14 },
-  
-  addSetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10, paddingVertical: 5 },
-  addSetText: { color: '#0aff96', marginLeft: 8, fontWeight: 'bold', fontSize: 13 },
-  
-  searchBtn: { position: 'absolute', bottom: 30, left: 20, right: 20, backgroundColor: '#0aff96', height: 60, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
-  searchBtnText: { flexDirection: 'row', fontWeight: 'bold'  }
-
+  container: { flex: 1, backgroundColor: '#000', alignSelf: 'center', width: '100%', maxWidth: 500 },
+  exBox: { backgroundColor: '#1c1c1e', padding: 18, borderRadius: 22, marginBottom: 20, borderWidth: 1, borderColor: '#2c2c2e' },
+  exHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
+  exGif: { width: 50, height: 50, borderRadius: 10, marginRight: 12, backgroundColor: '#333' },
+  exName: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  exMuscle: { color: '#A855F7', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' },
+  tableHeader: { flexDirection: 'row', marginBottom: 12, paddingHorizontal: 5 },
+  colLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '800', textAlign: 'center' },
+  setRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
+  setNum: { color: '#A855F7', flex: 1, textAlign: 'center', fontWeight: 'bold', fontSize: 16 },
+  input: { backgroundColor: '#2c2c2e', color: '#fff', flex: 2, padding: 10, borderRadius: 10, textAlign: 'center', fontSize: 15, borderWidth: 1, borderColor: '#333' },
+  addSetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingVertical: 8, borderStyle: 'dashed', borderWidth: 1, borderColor: '#A855F7', borderRadius: 10 },
+  addSetText: { color: '#A855F7', marginLeft: 8, fontWeight: 'bold', fontSize: 14 },
+  searchBtn: { position: 'absolute', bottom: 30, left: 20, right: 20, backgroundColor: '#A855F7', height: 60, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
+  searchBtnText: { fontWeight: 'bold', fontSize: 16 },
+  modalHeader: { flexDirection: 'row', padding: 20, alignItems: 'center', gap: 10 },
+  searchInput: { flex: 1, backgroundColor: '#1c1c1e', color: '#fff', padding: 15, borderRadius: 15, borderWidth: 1, borderColor: '#A855F7' },
+  closeBtn: { padding: 10 },
+  exerciseItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#1c1c1e' },
+  miniGif: { width: 40, height: 40, borderRadius: 5, marginRight: 15, backgroundColor: '#333' }
 });
