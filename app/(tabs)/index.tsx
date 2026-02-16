@@ -1,5 +1,7 @@
+import Logo from '../../components/Logo';
+import { PRESET_ROUTINES } from '../../constants/presets';
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, Modal, TextInput, ScrollView, StatusBar, Platform } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Alert, Modal, TextInput, ScrollView, StatusBar, Platform, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { getRoutinesFromStorage, saveRoutinesToStorage } from '../../services/storage';
@@ -24,26 +26,49 @@ export default function RoutinesScreen() {
     setRoutines(data || []);
   };
 
-  const handleCreateRoutine = async (templateId?: string) => {
-    let name = newRoutineName;
-    if (templateId) {
-      const template = PLAN_TEMPLATES.find(t => t.id === templateId);
-      name = template?.name || 'Rutina';
+const handleCreateRoutine = async (templateId?: string) => {
+  const allRoutines = await getRoutinesFromStorage() || [];
+  let updatedRoutines = [...allRoutines];
+
+  if (templateId) {
+    // Buscamos la plantilla por ID (p3, p4, p5, p6)
+    const template = PRESET_ROUTINES.find(t => t.id === templateId);
+
+    if (template) {
+      // Por cada día en la plantilla, creamos una RUTINA INDEPENDIENTE
+      const newDays = template.days.map((day, index) => ({
+        id: (Date.now() + index).toString(), // IDs únicos para cada día
+        name: `${template.name}: ${day.dayName}`, // Ej: Torso/Pierna: Torso 1
+        exercises: day.exercises.map(ex => ({
+          ...ex,
+          instanceId: Math.random().toString(36).substr(2, 9),
+          sets: ex.sets || [{ id: '1', reps: '12', weight: '0', rest: '60' }]
+        }))
+      }));
+
+      updatedRoutines = [...newDays, ...updatedRoutines];
+      
+      if (Platform.OS !== 'web') {
+        Alert.alert("¡Plan Creado!", `Se han añadido ${newDays.length} días de entrenamiento a tu lista.`);
+      }
     }
-    if (!name.trim()) return;
-
-    const newRoutine = {
+  } else {
+    // Lógica para rutina personalizada (si no hay templateId)
+    if (!newRoutineName.trim()) return;
+    const customRoutine = {
       id: Date.now().toString(),
-      name: name,
-      exercises: [], // Aquí se inyectarían los ejercicios de la plantilla
+      name: newRoutineName,
+      exercises: []
     };
+    updatedRoutines = [customRoutine, ...updatedRoutines];
+  }
 
-    const updated = [...routines, newRoutine];
-    await saveRoutinesToStorage(updated);
-    setRoutines(updated);
-    setIsModalVisible(false);
-    setNewRoutineName('');
-  };
+  // Guardar y actualizar estado
+  await saveRoutinesToStorage(updatedRoutines);
+  setRoutines(updatedRoutines);
+  setIsModalVisible(false);
+  setNewRoutineName('');
+};
 
   const deleteRoutine = (id: string) => {
     const eliminar = () => {
@@ -65,11 +90,16 @@ export default function RoutinesScreen() {
   return (
     <View style={styles.container}>
       <StatusBar barStyle="light-content" />
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>MetaFit</Text>
-        <TouchableOpacity style={styles.plusButton} onPress={() => setIsModalVisible(true)}>
-          <Ionicons name="add" size={30} color="#000" />
-        </TouchableOpacity>
+
+<View style={styles.header}>
+<View style={styles.logoContainer}>
+  <Logo width={80} height={80} />
+  <Text style={styles.headerTitle}>MetaFit</Text>
+</View>
+
+  <TouchableOpacity style={styles.plusButton} onPress={() => setIsModalVisible(true)}>
+    <Ionicons name="add" size={30} color="#000" />
+  </TouchableOpacity>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -139,8 +169,10 @@ const styles = StyleSheet.create({
     maxWidth: 500 
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, alignItems: 'center', marginBottom: 25 },
-  headerTitle: { color: '#fff', fontSize: 32, fontWeight: '900' },
-  plusButton: { backgroundColor: '#A855F7', width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
+  logoContainer:{ flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logoImage: { width: 120, height: 120, borderRadius: 8 },
+  headerTitle: { color: '#fff', fontSize: 26, fontWeight: '900', letterSpacing: -1 },
+  plusButton: { backgroundColor: '#A855F7', width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
   label: { color: '#94A3B8', fontSize: 11, fontWeight: 'bold', marginLeft: 20, marginBottom: 15, letterSpacing: 1.2 },
   hScroll: { paddingLeft: 20, gap: 12, paddingBottom: 10 },
   planCard: { backgroundColor: '#1c1c1e', padding: 15, borderRadius: 20, width: 125, height: 105, justifyContent: 'center', alignItems: 'center' },
