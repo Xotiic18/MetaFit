@@ -1,222 +1,291 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, ScrollView, TouchableOpacity, Image, Modal, TextInput, FlatList, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { 
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, 
+  TextInput, ActivityIndicator, Modal, FlatList, SafeAreaView, Image 
+} from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-// Asegúrate de que estas rutas sean correctas en tu proyecto
-import { EXERCISE_DATABASE } from '../constants/exercises';
 import { getRoutinesFromStorage, saveRoutinesToStorage } from '../services/storage';
+import { EXERCISES_DATABASE } from '../constants/exercises'; 
 
-const ALL_EXERCISES = Object.keys(EXERCISE_DATABASE).flatMap(m => 
-  EXERCISE_DATABASE[m].map(ex => ({ ...ex, muscle: m }))
-);
+interface Exercise {
+  id: string;
+  name: string;
+  muscle: string;
+  gif: any; 
+  instanceId?: string;
+  sets?: any[];
+}
 
-export default function RoutineDetail() {
-  const { id, name } = useLocalSearchParams();
-  const [selectedExercises, setSelectedExercises] = useState([]);
-  const [showSelector, setShowSelector] = useState(false);
-  const [search, setSearch] = useState('');
+export default function RoutineDetailScreen() {
+  const { id } = useLocalSearchParams();
+  const [routines, setRoutines] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  
+  // Nuevo estado para el buscador
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => { load(); }, [id]);
-
-  const load = async () => {
-    const all = await getRoutinesFromStorage();
-    const current = all.find(r => r.id === id);
-    if (current?.exercises) setSelectedExercises(current.exercises);
-  };
-
-  const saveToStorage = async (updatedExercises) => {
-    setSelectedExercises(updatedExercises);
-    const all = await getRoutinesFromStorage();
-    await saveRoutinesToStorage(all.map(r => r.id === id ? { ...r, exercises: updatedExercises } : r));
-  };
-
-  const addExercise = (exercise) => {
-    const newExercise = {
-      ...exercise,
-      instanceId: Date.now().toString(),
-      sets: [{ id: '1', reps: '', weight: '', rest: '60' }]
+  useEffect(() => {
+    const loadData = async () => {
+      const data = await getRoutinesFromStorage();
+      setRoutines(data || []);
+      setLoading(false);
     };
-    const updated = [...selectedExercises, newExercise];
-    saveToStorage(updated);
-    setShowSelector(false);
+    loadData();
+  }, []);
+
+  const currentRoutine = routines.find(r => r.id === id);
+  
+const flatExercises = Object.values(EXERCISES_DATABASE).flat() as Exercise[];
+
+const filteredExercises = flatExercises.filter(ex => {
+  const nameMatch = ex?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+  const muscleMatch = ex?.muscle?.toLowerCase().includes(searchQuery.toLowerCase());
+  
+  return nameMatch || muscleMatch;
+});
+
+  const updateStorage = async (updatedRoutines: any[]) => {
+    setRoutines(updatedRoutines);
+    await saveRoutinesToStorage(updatedRoutines);
   };
 
-  const addSet = (instanceId) => {
-    const updated = selectedExercises.map(ex => {
-      if (ex.instanceId === instanceId) {
-        const newSet = { id: Date.now().toString(), reps: '', weight: '', rest: '60' };
-        return { ...ex, sets: [...ex.sets, newSet] };
+  const updateSetData = (exerciseInstanceId: string, setId: string, field: 'weight' | 'reps', value: string) => {
+    const updated = routines.map(r => {
+      if (r.id === id) {
+        return {
+          ...r,
+          exercises: r.exercises.map((ex: any) => {
+            if (ex.instanceId === exerciseInstanceId) {
+              return {
+                ...ex,
+                sets: ex.sets.map((s: any) => s.id === setId ? { ...s, [field]: value } : s)
+              };
+            }
+            return ex;
+          })
+        };
       }
-      return ex;
+      return r;
     });
-    saveToStorage(updated);
+    updateStorage(updated);
   };
 
-  const updateSetData = (instanceId, setId, field, value) => {
-    const updated = selectedExercises.map(ex => {
-      if (ex.instanceId === instanceId) {
-        const newSets = ex.sets.map(s => s.id === setId ? { ...s, [field]: value } : s);
-        return { ...ex, sets: newSets };
-      }
-      return ex;
+  const addExerciseToRoutine = (baseExercise: any) => {
+    const newInstance = {
+      ...baseExercise,
+      instanceId: Date.now().toString(),
+      sets: [{ id: Date.now().toString(), reps: '10', weight: '0' }]
+    };
+    const updated = routines.map(r => {
+      if (r.id === id) return { ...r, exercises: [...r.exercises, newInstance] };
+      return r;
     });
-    saveToStorage(updated);
+    updateStorage(updated);
+    setIsModalVisible(false);
+    setSearchQuery(''); // Limpiar búsqueda al cerrar
   };
 
-  const removeExercise = (instanceId) => {
-    const confirmar = Platform.OS === 'web' 
-      ? window.confirm("¿Quitar este ejercicio?") 
-      : true;
-
-    if (confirmar) {
-      if (Platform.OS !== 'web') {
-        Alert.alert("Quitar Ejercicio", "¿Quieres eliminarlo?", [
-          { text: "No" },
-          { text: "Sí", style: "destructive", onPress: () => {
-            const updated = selectedExercises.filter(ex => ex.instanceId !== instanceId);
-            saveToStorage(updated);
-          }}
-        ]);
-      } else {
-        const updated = selectedExercises.filter(ex => ex.instanceId !== instanceId);
-        saveToStorage(updated);
+  const addSet = (exerciseInstanceId: string) => {
+    const updated = routines.map(r => {
+      if (r.id === id) {
+        return {
+          ...r,
+          exercises: r.exercises.map((ex: any) => {
+            if (ex.instanceId === exerciseInstanceId) {
+              const newSet = { id: Date.now().toString(), reps: '10', weight: '0' };
+              return { ...ex, sets: [...(ex.sets || []), newSet] };
+            }
+            return ex;
+          })
+        };
       }
-    }
+      return r;
+    });
+    updateStorage(updated);
   };
 
-  const filteredExercises = ALL_EXERCISES.filter(ex => 
-    ex.name.toLowerCase().includes(search.toLowerCase()) || 
-    ex.muscle.toLowerCase().includes(search.toLowerCase())
-  );
+  const removeSet = (exerciseInstanceId: string, setId: string) => {
+    const updated = routines.map(r => {
+      if (r.id === id) {
+        return {
+          ...r,
+          exercises: r.exercises.map((ex: any) => {
+            if (ex.instanceId === exerciseInstanceId) {
+              return { ...ex, sets: ex.sets.filter((s: any) => s.id !== setId) };
+            }
+            return ex;
+          })
+        };
+      }
+      return r;
+    });
+    updateStorage(updated);
+  };
+
+  const removeExercise = (exerciseInstanceId: string) => {
+    const updated = routines.map(r => {
+      if (r.id === id) return { ...r, exercises: r.exercises.filter((ex: any) => ex.instanceId !== exerciseInstanceId) };
+      return r;
+    });
+    updateStorage(updated);
+  };
+
+  if (loading) return <ActivityIndicator color="#A855F7" style={{ flex: 1, backgroundColor: '#000' }} />;
+  if (!currentRoutine) return <View style={styles.container}><Text style={styles.text}>No encontrada</Text></View>;
 
   return (
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-      <View style={styles.container}>
-        <Stack.Screen options={{ 
-          title: name as string, 
-          headerTintColor: '#A855F7', 
-          headerStyle: { backgroundColor: '#000' } 
-        }} />
-        
-        <ScrollView contentContainerStyle={{ padding: 15, paddingBottom: 120 }}>
-          {selectedExercises.map((ex) => (
-            <View key={ex.instanceId} style={styles.exBox}>
-              <View style={styles.exHeader}>
-                <Image source={{ uri: ex.gif }} style={styles.exGif} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.exName}>{ex.name}</Text>
-                  <Text style={styles.exMuscle}>{ex.muscle}</Text>
-                </View>
-                <TouchableOpacity onPress={() => removeExercise(ex.instanceId)}>
-                  <Ionicons name="trash-outline" size={18} color="#ff4444" />
-                </TouchableOpacity>
+    <SafeAreaView style={styles.container}>
+      <Stack.Screen options={{ 
+        title: currentRoutine.name, 
+        headerTintColor: '#A855F7', 
+        headerStyle: { backgroundColor: '#000' },
+        headerBackTitle: 'Volver'
+      }} />
+      
+      <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        {currentRoutine.exercises.map((exercise: any) => (
+          <View key={exercise.instanceId} style={styles.exerciseCard}>
+            
+            <View style={styles.exerciseHeader}>
+              <View>
+                <Text style={styles.exerciseName}>{exercise.name}</Text>
+                <Text style={styles.exerciseSubtitle}>{exercise.muscle}</Text>
               </View>
-
-              <View style={styles.tableHeader}>
-                <Text style={[styles.colLabel, { flex: 1 }]}>SET</Text>
-                <Text style={[styles.colLabel, { flex: 2 }]}>REPS</Text>
-                <Text style={[styles.colLabel, { flex: 2 }]}>KG</Text>
-                <Text style={[styles.colLabel, { flex: 2 }]}>DESC.</Text>
-              </View>
-
-              {ex.sets.map((set, index) => (
-                <View key={set.id} style={styles.setRow}>
-                  <Text style={styles.setNum}>{index + 1}</Text>
-                  <TextInput 
-                    style={styles.input} 
-                    keyboardType="numeric" 
-                    placeholder="0" 
-                    placeholderTextColor="#444"
-                    value={set.reps}
-                    onChangeText={(val) => updateSetData(ex.instanceId, set.id, 'reps', val)}
-                  />
-                  <TextInput 
-                    style={styles.input} 
-                    keyboardType="numeric" 
-                    placeholder="0" 
-                    placeholderTextColor="#444"
-                    value={set.weight}
-                    onChangeText={(val) => updateSetData(ex.instanceId, set.id, 'weight', val)}
-                  />
-                  <TextInput 
-                    style={styles.input} 
-                    keyboardType="numeric" 
-                    placeholder="60s" 
-                    placeholderTextColor="#444"
-                    value={set.rest}
-                    onChangeText={(val) => updateSetData(ex.instanceId, set.id, 'rest', val)}
-                  />
-                </View>
-              ))}
-
-              <TouchableOpacity style={styles.addSetRow} onPress={() => addSet(ex.instanceId)}>
-                <Ionicons name="add-circle-outline" size={20} color="#A855F7" />
-                <Text style={styles.addSetText}>Añadir Serie</Text>
+              <TouchableOpacity onPress={() => removeExercise(exercise.instanceId)}>
+                <Ionicons name="trash-outline" size={20} color="#ff4444" />
               </TouchableOpacity>
             </View>
-          ))}
-        </ScrollView>
 
-        <TouchableOpacity style={styles.searchBtn} onPress={() => setShowSelector(true)}>
-          <Ionicons name="search" size={22} color="#000" />
-          <Text style={styles.searchBtnText}>BUSCAR EJERCICIO</Text>
-        </TouchableOpacity>
-
-        {/* MODAL DE BÚSQUEDA CORREGIDO */}
-        <Modal visible={showSelector} animationType="slide" transparent={false}>
-          <View style={[styles.container, { paddingTop: 50 }]}>
-            <View style={styles.modalHeader}>
-              <TextInput 
-                style={styles.searchInput}
-                placeholder="Buscar ejercicio o músculo..."
-                placeholderTextColor="#94A3B8"
-                value={search}
-                onChangeText={setSearch}
-                autoFocus
-              />
-              <TouchableOpacity onPress={() => setShowSelector(false)} style={styles.closeBtn}>
-                <Text style={{ color: '#A855F7', fontWeight: 'bold' }}>Cerrar</Text>
-              </TouchableOpacity>
-            </View>
-            <FlatList 
-              data={filteredExercises}
-              keyExtractor={(item, index) => index.toString()}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.exerciseItem} onPress={() => addExercise(item)}>
-                  <Image source={{ uri: item.gif }} style={styles.miniGif} />
-                  <View>
-                    <Text style={{ color: '#fff', fontWeight: 'bold' }}>{item.name}</Text>
-                    <Text style={{ color: '#A855F7', fontSize: 12 }}>{item.muscle}</Text>
-                  </View>
-                </TouchableOpacity>
+            <View style={styles.gifContainer}>
+              {exercise.gif ? (
+                <Image 
+                  source={typeof exercise.gif === 'string' ? { uri: exercise.gif } : exercise.gif} 
+                  style={styles.exerciseGif}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={[styles.exerciseGif, styles.gifPlaceholder]}>
+                  <Ionicons name="image-outline" size={40} color="#333" />
+                </View>
               )}
+            </View>
+
+            <View style={styles.tableHeader}>
+              <Text style={[styles.columnLabel, { width: 35 }]}>SET</Text>
+              <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>PESO KG</Text>
+              <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>REPS</Text>
+              <Text style={{ width: 30 }}></Text>
+            </View>
+
+            {exercise.sets?.map((set: any, index: number) => (
+              <View key={set.id} style={styles.setRow}>
+                <View style={styles.setNumberCircle}><Text style={styles.setNumberText}>{index + 1}</Text></View>
+                <TextInput 
+                  style={styles.input} 
+                  value={set.weight} 
+                  keyboardType="numeric" 
+                  onChangeText={(val) => updateSetData(exercise.instanceId, set.id, 'weight', val)}
+                />
+                <TextInput 
+                  style={styles.input} 
+                  value={set.reps} 
+                  keyboardType="numeric" 
+                  onChangeText={(val) => updateSetData(exercise.instanceId, set.id, 'reps', val)}
+                />
+                <TouchableOpacity onPress={() => removeSet(exercise.instanceId, set.id)}>
+                  <Ionicons name="remove-circle-outline" size={20} color="#444" />
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            <TouchableOpacity style={styles.addSetButton} onPress={() => addSet(exercise.instanceId)}>
+              <Ionicons name="add" size={16} color="#A855F7" />
+              <Text style={styles.addSetText}>Añadir Serie</Text>
+            </TouchableOpacity>
+          </View>
+        ))}
+
+        <TouchableOpacity style={styles.mainAddButton} onPress={() => setIsModalVisible(true)}>
+          <Ionicons name="barbell-outline" size={24} color="#fff" />
+          <Text style={styles.mainAddButtonText}>Agregar Ejercicio</Text>
+        </TouchableOpacity>
+        
+        <View style={{ height: 60 }} />
+      </ScrollView>
+
+      <Modal visible={isModalVisible} animationType="slide" presentationStyle="pageSheet">
+        <View style={styles.modalContainer}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Catálogo</Text>
+            <TouchableOpacity onPress={() => setIsModalVisible(false)}>
+              <Ionicons name="close-circle" size={32} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* BARRA DE BÚSQUEDA */}
+          <View style={styles.searchBarContainer}>
+            <Ionicons name="search" size={20} color="#666" style={{ marginRight: 10 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar ejercicio o músculo..."
+              placeholderTextColor="#666"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
             />
           </View>
-        </Modal>
-      </View>
-    </KeyboardAvoidingView>
+
+          <FlatList
+            data={filteredExercises}
+            keyExtractor={(item, index) => item.id || index.toString()} // Más seguro usar index si falta ID
+            renderItem={({ item }: { item: Exercise }) => (
+              <TouchableOpacity 
+                style={styles.exerciseOption} 
+                onPress={() => addExerciseToRoutine(item)}
+              >
+                <Text style={styles.exerciseOptionName}>{item?.name || 'Sin nombre'}</Text>
+                <Text style={styles.exerciseOptionMuscle}>{item?.muscle || 'General'}</Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', alignSelf: 'center', width: '100%', maxWidth: 500 },
-  exBox: { backgroundColor: '#1c1c1e', padding: 18, borderRadius: 22, marginBottom: 20, borderWidth: 1, borderColor: '#2c2c2e' },
-  exHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 18 },
-  exGif: { width: 50, height: 50, borderRadius: 10, marginRight: 12, backgroundColor: '#333' },
-  exName: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  exMuscle: { color: '#A855F7', fontSize: 12, fontWeight: 'bold', textTransform: 'uppercase' },
-  tableHeader: { flexDirection: 'row', marginBottom: 12, paddingHorizontal: 5 },
-  colLabel: { color: '#94A3B8', fontSize: 11, fontWeight: '800', textAlign: 'center' },
-  setRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
-  setNum: { color: '#A855F7', flex: 1, textAlign: 'center', fontWeight: 'bold', fontSize: 16 },
-  input: { backgroundColor: '#2c2c2e', color: '#fff', flex: 2, padding: 10, borderRadius: 10, textAlign: 'center', fontSize: 15, borderWidth: 1, borderColor: '#333' },
-  addSetRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 12, paddingVertical: 8, borderStyle: 'dashed', borderWidth: 1, borderColor: '#A855F7', borderRadius: 10 },
-  addSetText: { color: '#A855F7', marginLeft: 8, fontWeight: 'bold', fontSize: 14 },
-  searchBtn: { position: 'absolute', bottom: 30, left: 20, right: 20, backgroundColor: '#A855F7', height: 60, borderRadius: 30, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 10 },
-  searchBtnText: { fontWeight: 'bold', fontSize: 16 },
-  modalHeader: { flexDirection: 'row', padding: 20, alignItems: 'center', gap: 10 },
-  searchInput: { flex: 1, backgroundColor: '#1c1c1e', color: '#fff', padding: 15, borderRadius: 15, borderWidth: 1, borderColor: '#A855F7' },
-  closeBtn: { padding: 10 },
-  exerciseItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 1, borderBottomColor: '#1c1c1e' },
-  miniGif: { width: 40, height: 40, borderRadius: 5, marginRight: 15, backgroundColor: '#333' }
+  container: { flex: 1, backgroundColor: '#000' },
+  scrollContainer: { padding: 16 },
+  text: { color: '#fff', textAlign: 'center', marginTop: 20 },
+  exerciseCard: { backgroundColor: '#0A0A0A', borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: '#1A1A1A' },
+  exerciseHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
+  exerciseName: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  exerciseSubtitle: { color: '#A855F7', fontSize: 11, textTransform: 'uppercase', fontWeight: '700' },
+  gifContainer: { width: '100%', height: 160, borderRadius: 12, overflow: 'hidden', marginBottom: 15, backgroundColor: '#111' },
+  exerciseGif: { width: '100%', height: '100%' },
+  gifPlaceholder: { justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' },
+  tableHeader: { flexDirection: 'row', marginBottom: 8, opacity: 0.5 },
+  columnLabel: { color: '#fff', fontSize: 9, fontWeight: '800' },
+  setRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8, backgroundColor: '#111', padding: 8, borderRadius: 10 },
+  setNumberCircle: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#1A1A1A', justifyContent: 'center', alignItems: 'center' },
+  setNumberText: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+  input: { flex: 1, color: '#fff', textAlign: 'center', fontSize: 16, fontWeight: 'bold' },
+  addSetButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 8, padding: 8, borderStyle: 'dashed', borderWidth: 1, borderColor: '#333', borderRadius: 8 },
+  addSetText: { color: '#A855F7', fontSize: 12, fontWeight: 'bold', marginLeft: 4 },
+  mainAddButton: { backgroundColor: '#A855F7', flexDirection: 'row', borderRadius: 14, padding: 16, justifyContent: 'center', alignItems: 'center', marginTop: 10 },
+  mainAddButtonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', marginLeft: 10 },
+  modalContainer: { flex: 1, backgroundColor: '#000', padding: 20 },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
+  exerciseOption: { backgroundColor: '#0A0A0A', padding: 18, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#1A1A1A' },
+  exerciseOptionName: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
+  exerciseOptionMuscle: { color: '#666', fontSize: 12, marginTop: 4 },
+  searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, paddingHorizontal: 15, paddingVertical: 10, marginBottom: 20, borderWidth: 1, borderColor: '#1A1A1A' },
+  searchInput: {
+    flex: 1,
+    color: '#fff',
+    fontSize: 16,
+  },
 });

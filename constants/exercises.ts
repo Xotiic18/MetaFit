@@ -1,10 +1,10 @@
-export const EXERCISE_DATABASE = {
+export const EXERCISES_DATABASE = {
   Pecho: [
-    { id: 'p1', name: 'Press de Banca Plano (Barra)', gif: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKMGpxx6xYF9lRe/giphy.gif' },
-    { id: 'p2', name: 'Press Inclinado (Mancuernas)', gif: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKMGpxx6xYF9lRe/giphy.gif' },
-    { id: 'p3', name: 'Aperturas en Peck Deck', gif: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKMGpxx6xYF9lRe/giphy.gif' },
-    { id: 'p4', name: 'Fondos en Paralelas (Dips)', gif: 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNHJueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZzRueXF4ZyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7TKMGpxx6xYF9lRe/giphy.gif' },
-    { id: 'p5', name: 'Cruce de Poleas Altas', gif: 'https://media.giphy.com/media/3o7TKMGpxx6xYF9lRe/giphy.gif' },
+    { id: 'p1', name: 'Press de Banca Plano (Barra)', gif: require('../assets/gifs/press-banca.gif') },
+    { id: 'p2', name: 'Press Inclinado (Mancuernas)', gif: require('../assets/gifs/press-inclinado.gif') },
+    { id: 'p3', name: 'Aperturas en Peck Deck', gif: require('../assets/gifs/aperturas.gif') },
+    { id: 'p4', name: 'Fondos en Paralelas (Dips)', gif: require('../assets/gifs/fondos-paralelas.gif') },
+    { id: 'p5', name: 'Cruce de Poleas Altas', gif: require('../assets/gifs/cruce-poleas-alta.gif') },
   ],
   Espalda: [
     { id: 'e1', name: 'Dominadas (Pull-ups)', gif: 'https://media.giphy.com/media/3o7TKMGpxx6xYF9lRe/giphy.gif' },
