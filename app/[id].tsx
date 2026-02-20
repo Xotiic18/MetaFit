@@ -8,24 +8,24 @@ import { Ionicons } from '@expo/vector-icons';
 import { getRoutinesFromStorage, saveRoutinesToStorage } from '../services/storage';
 import { EXERCISES_DATABASE } from '../constants/exercises'; 
 
+// Definición de la estructura de datos para un ejercicio
 interface Exercise {
   id: string;
   name: string;
   muscle: string;
   gif: any; 
-  instanceId?: string;
+  instanceId?: string; // ID único para distinguir el mismo ejercicio en diferentes rutinas
   sets?: any[];
 }
 
 export default function RoutineDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams(); // Obtiene el ID de la rutina desde la URL
   const [routines, setRoutines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalVisible, setIsModalVisible] = useState(false);
-  
-  // Nuevo estado para el buscador
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Carga inicial: Recupera las rutinas del almacenamiento persistente
   useEffect(() => {
     const loadData = async () => {
       const data = await getRoutinesFromStorage();
@@ -35,22 +35,26 @@ export default function RoutineDetailScreen() {
     loadData();
   }, []);
 
+  // Identifica la rutina actual basada en el ID de la ruta
   const currentRoutine = routines.find(r => r.id === id);
   
-const flatExercises = Object.values(EXERCISES_DATABASE).flat() as Exercise[];
+  // Aplanamiento de la DB: Convierte el objeto por categorías en una lista simple para el buscador
+  const flatExercises = Object.values(EXERCISES_DATABASE).flat() as Exercise[];
 
-const filteredExercises = flatExercises.filter(ex => {
-  const nameMatch = ex?.name?.toLowerCase().includes(searchQuery.toLowerCase());
-  const muscleMatch = ex?.muscle?.toLowerCase().includes(searchQuery.toLowerCase());
-  
-  return nameMatch || muscleMatch;
-});
+  // Lógica de búsqueda: Filtra ejercicios por nombre o músculo (insensible a mayúsculas)
+  const filteredExercises = flatExercises.filter(ex => {
+    const nameMatch = ex?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const muscleMatch = ex?.muscle?.toLowerCase().includes(searchQuery.toLowerCase());
+    return nameMatch || muscleMatch;
+  });
 
+  // Helper para sincronizar el estado local con AsyncStorage
   const updateStorage = async (updatedRoutines: any[]) => {
     setRoutines(updatedRoutines);
     await saveRoutinesToStorage(updatedRoutines);
   };
 
+  // Actualiza peso o repeticiones buscando la rutina, el ejercicio y el set específico
   const updateSetData = (exerciseInstanceId: string, setId: string, field: 'weight' | 'reps', value: string) => {
     const updated = routines.map(r => {
       if (r.id === id) {
@@ -72,10 +76,11 @@ const filteredExercises = flatExercises.filter(ex => {
     updateStorage(updated);
   };
 
+  // Inserta un ejercicio del catálogo a la rutina actual con un set inicial por defecto
   const addExerciseToRoutine = (baseExercise: any) => {
     const newInstance = {
       ...baseExercise,
-      instanceId: Date.now().toString(),
+      instanceId: Date.now().toString(), // Genera ID único para esta "instancia" de ejercicio
       sets: [{ id: Date.now().toString(), reps: '10', weight: '0' }]
     };
     const updated = routines.map(r => {
@@ -84,9 +89,10 @@ const filteredExercises = flatExercises.filter(ex => {
     });
     updateStorage(updated);
     setIsModalVisible(false);
-    setSearchQuery(''); // Limpiar búsqueda al cerrar
+    setSearchQuery('');
   };
 
+  // Añade una nueva fila de entrenamiento (set) a un ejercicio específico
   const addSet = (exerciseInstanceId: string) => {
     const updated = routines.map(r => {
       if (r.id === id) {
@@ -106,6 +112,7 @@ const filteredExercises = flatExercises.filter(ex => {
     updateStorage(updated);
   };
 
+  // Elimina un set específico filtrando por su ID
   const removeSet = (exerciseInstanceId: string, setId: string) => {
     const updated = routines.map(r => {
       if (r.id === id) {
@@ -124,6 +131,7 @@ const filteredExercises = flatExercises.filter(ex => {
     updateStorage(updated);
   };
 
+  // Borra un ejercicio completo de la rutina
   const removeExercise = (exerciseInstanceId: string) => {
     const updated = routines.map(r => {
       if (r.id === id) return { ...r, exercises: r.exercises.filter((ex: any) => ex.instanceId !== exerciseInstanceId) };
@@ -132,11 +140,13 @@ const filteredExercises = flatExercises.filter(ex => {
     updateStorage(updated);
   };
 
+  // Manejo de estados de carga y errores de navegación
   if (loading) return <ActivityIndicator color="#A855F7" style={{ flex: 1, backgroundColor: '#000' }} />;
   if (!currentRoutine) return <View style={styles.container}><Text style={styles.text}>No encontrada</Text></View>;
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Configura el título dinámico en la cabecera de navegación */}
       <Stack.Screen options={{ 
         title: currentRoutine.name, 
         headerTintColor: '#A855F7', 
@@ -145,6 +155,7 @@ const filteredExercises = flatExercises.filter(ex => {
       }} />
       
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        {/* Mapeo de ejercicios añadidos a la rutina */}
         {currentRoutine.exercises.map((exercise: any) => (
           <View key={exercise.instanceId} style={styles.exerciseCard}>
             
@@ -158,6 +169,7 @@ const filteredExercises = flatExercises.filter(ex => {
               </TouchableOpacity>
             </View>
 
+            {/* Renderizado condicional de GIF: Soporta rutas locales (require) y URLs (uri) */}
             <View style={styles.gifContainer}>
               {exercise.gif ? (
                 <Image 
@@ -172,6 +184,7 @@ const filteredExercises = flatExercises.filter(ex => {
               )}
             </View>
 
+            {/* Tabla de entrada de datos para series */}
             <View style={styles.tableHeader}>
               <Text style={[styles.columnLabel, { width: 35 }]}>SET</Text>
               <Text style={[styles.columnLabel, { flex: 1, textAlign: 'center' }]}>PESO KG</Text>
@@ -215,6 +228,7 @@ const filteredExercises = flatExercises.filter(ex => {
         <View style={{ height: 60 }} />
       </ScrollView>
 
+      {/* Interfaz de selección de ejercicios del catálogo */}
       <Modal visible={isModalVisible} animationType="slide" presentationStyle="pageSheet">
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -224,7 +238,6 @@ const filteredExercises = flatExercises.filter(ex => {
             </TouchableOpacity>
           </View>
 
-          {/* BARRA DE BÚSQUEDA */}
           <View style={styles.searchBarContainer}>
             <Ionicons name="search" size={20} color="#666" style={{ marginRight: 10 }} />
             <TextInput
@@ -238,7 +251,7 @@ const filteredExercises = flatExercises.filter(ex => {
 
           <FlatList
             data={filteredExercises}
-            keyExtractor={(item, index) => item.id || index.toString()} // Más seguro usar index si falta ID
+            keyExtractor={(item, index) => item.id || index.toString()}
             renderItem={({ item }: { item: Exercise }) => (
               <TouchableOpacity 
                 style={styles.exerciseOption} 

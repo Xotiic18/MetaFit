@@ -1,3 +1,5 @@
+//Copia y pega de un generador de codigo svg
+
 import * as React from "react"
 import Svg, { Defs, ClipPath, Path, Mask, G, Image } from "react-native-svg"
 /* SVGR has dropped some elements not supported by react-native-svg: filter */

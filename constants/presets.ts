@@ -1,3 +1,5 @@
+//Ejercicios de las plantillas
+
 export const PRESET_ROUTINES = [
   {
     id: 'p3',

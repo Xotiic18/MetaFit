@@ -1,3 +1,5 @@
+//Base de datos local del catalogo de ejercicios
+
 export const EXERCISES_DATABASE = {
   Pecho: [
     { id: 'p1', name: 'Press de Banca Plano (Barra)', gif: require('../assets/gifs/press-banca.gif') },
