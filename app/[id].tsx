@@ -7,6 +7,8 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { getRoutinesFromStorage, saveRoutinesToStorage } from '../services/storage';
 import { EXERCISES_DATABASE } from '../constants/exercises'; 
+const [isWorkoutActive, setIsWorkoutActive] = useState(false);
+const [startTime, setStartTime] = useState<Date | null>(null);
 
 // Definición de la estructura de datos para un ejercicio
 interface Exercise {
@@ -24,6 +26,31 @@ export default function RoutineDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  // Estados para el cronómetro
+  const [timeLeft, setTimeLeft] = useState(0);
+  const [isTimerActive, setIsTimerActive] = useState(false);
+
+  // Lógica del segundero
+  useEffect(() => {
+  let interval: NodeJS.Timeout;
+
+  if (isTimerActive && timeLeft > 0) {
+    interval = setInterval(() => {
+      setTimeLeft((prev) => prev - 1);
+    }, 1000);
+  } else if (timeLeft === 0) {
+    setIsTimerActive(false);
+    // Aquí podrías agregar una vibración (Haptics) después
+  }
+
+  return () => clearInterval(interval);
+    }, [isTimerActive, timeLeft]);
+
+// Función para iniciar el descanso (ej. 60 o 90 segundos)
+  const startRest = (seconds: number) => {
+  setTimeLeft(seconds);
+  setIsTimerActive(true);
+};
 
   // Carga inicial: Recupera las rutinas del almacenamiento persistente
   useEffect(() => {
@@ -155,6 +182,24 @@ export default function RoutineDetailScreen() {
       }} />
       
       <ScrollView contentContainerStyle={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+            <TouchableOpacity 
+      style={[styles.workoutButton, isWorkoutActive ? styles.activeButton : styles.inactiveButton]} 
+      onPress={() => {
+        if (!isWorkoutActive) {
+          setIsWorkoutActive(true);
+          setStartTime(new Date());
+        } else {
+          // Aquí irá la lógica para guardar en el historial después
+          alert("¡Entrenamiento finalizado! Guardando progreso...");
+          setIsWorkoutActive(false);
+        }
+      }}
+    >
+      <Ionicons name={isWorkoutActive ? "stop-circle" : "play-circle"} size={24} color="#fff" />
+      <Text style={styles.workoutButtonText}>
+        {isWorkoutActive ? "Finalizar Entrenamiento" : "Iniciar Entrenamiento"}
+      </Text>
+    </TouchableOpacity>
         {/* Mapeo de ejercicios añadidos a la rutina */}
         {currentRoutine.exercises.map((exercise: any) => (
           <View key={exercise.instanceId} style={styles.exerciseCard}>
@@ -194,21 +239,38 @@ export default function RoutineDetailScreen() {
 
             {exercise.sets?.map((set: any, index: number) => (
               <View key={set.id} style={styles.setRow}>
-                <View style={styles.setNumberCircle}><Text style={styles.setNumberText}>{index + 1}</Text></View>
+                <View style={styles.setNumberCircle}>
+                  <Text style={styles.setNumberText}>{index + 1}</Text>
+                </View>
+                
                 <TextInput 
                   style={styles.input} 
                   value={set.weight} 
                   keyboardType="numeric" 
+                  placeholder="0"
+                  placeholderTextColor="#444"
                   onChangeText={(val) => updateSetData(exercise.instanceId, set.id, 'weight', val)}
                 />
+                
                 <TextInput 
                   style={styles.input} 
                   value={set.reps} 
                   keyboardType="numeric" 
+                  placeholder="0"
+                  placeholderTextColor="#444"
                   onChangeText={(val) => updateSetData(exercise.instanceId, set.id, 'reps', val)}
                 />
+
+                {/* BOTÓN PARA ACTIVAR DESCANSO (60 SEGUNDOS) */}
+                <TouchableOpacity 
+                  onPress={() => startRest(60)} 
+                  style={{ marginRight: 10 }}
+                >
+                  <Ionicons name="timer-outline" size={20} color="#A855F7" />
+                </TouchableOpacity>
+
                 <TouchableOpacity onPress={() => removeSet(exercise.instanceId, set.id)}>
-                  <Ionicons name="remove-circle-outline" size={20} color="#444" />
+                  <Ionicons name="remove-circle-outline" size={20} color="#ff4444" />
                 </TouchableOpacity>
               </View>
             ))}
@@ -227,6 +289,34 @@ export default function RoutineDetailScreen() {
         
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      {isTimerActive && (
+        <View style={styles.timerFloatingCard}>
+          <View style={styles.timerMainControls}>
+            <Ionicons name="timer-outline" size={24} color="#fff" />
+            
+            {/* Controles de ajuste rápido */}
+            <View style={styles.adjustmentContainer}>
+              <TouchableOpacity onPress={() => setTimeLeft(prev => Math.max(0, prev - 15))}>
+                <Ionicons name="remove-circle" size={26} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
+              
+              <Text style={styles.timerText}>{timeLeft}s</Text>
+              
+              <TouchableOpacity onPress={() => setTimeLeft(prev => prev + 15)}>
+                <Ionicons name="add-circle" size={26} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <TouchableOpacity 
+            style={styles.stopTimerButton} 
+            onPress={() => setIsTimerActive(false)}
+          >
+            <Text style={styles.stopTimerText}>TERMINAR</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Interfaz de selección de ejercicios del catálogo */}
       <Modal visible={isModalVisible} animationType="slide" presentationStyle="pageSheet">
@@ -262,6 +352,8 @@ export default function RoutineDetailScreen() {
               </TouchableOpacity>
             )}
           />
+
+          
         </View>
       </Modal>
     </SafeAreaView>
@@ -296,9 +388,16 @@ const styles = StyleSheet.create({
   exerciseOptionName: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
   exerciseOptionMuscle: { color: '#666', fontSize: 12, marginTop: 4 },
   searchBarContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111', borderRadius: 12, paddingHorizontal: 15, paddingVertical: 10, marginBottom: 20, borderWidth: 1, borderColor: '#1A1A1A' },
-  searchInput: {
-    flex: 1,
-    color: '#fff',
-    fontSize: 16,
-  },
+  searchInput: { flex: 1, color: '#fff', fontSize: 16,},
+  timerFloatingCard: {position: 'absolute', bottom: 30, left: 20, right: 20, backgroundColor: '#A855F7', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 15, borderRadius: 15, elevation: 5, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 4, zIndex: 999 },
+  timerInfo: { flexDirection: 'row', alignItems: 'center' },
+  timerText: { color: '#fff', fontSize: 22, fontWeight: '800', marginHorizontal: 15, minWidth: 45, textAlign: 'center' },
+  stopTimerButton: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  stopTimerText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  timerMainControls: { flexDirection: 'row', alignItems: 'center', flex: 1 },
+  adjustmentContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, marginLeft: 15 },
+  workoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 18, borderRadius: 15, marginBottom: 20, borderWidth: 1 },
+  inactiveButton: { backgroundColor: '#10B981', borderColor: '#059661' },
+  activeButton: { backgroundColor: '#EF4444', borderColor: '#DC2626' },
+  workoutButtonText: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginLeft: 10 },
 });
