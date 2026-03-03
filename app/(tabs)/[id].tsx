@@ -7,8 +7,8 @@ import { useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
 // Importaciones de servicios y constantes
-import { getRoutinesFromStorage, saveRoutinesToStorage, saveSessionToHistory } from '../services/storage';
-import { EXERCISES_DATABASE } from '../constants/exercises'; 
+import { getRoutinesFromStorage, saveRoutinesToStorage, saveSessionToHistory } from '../../services/storage'
+import { EXERCISES_DATABASE } from '../../constants/exercises'; 
 
 // Definición de interfaces
 interface Exercise {

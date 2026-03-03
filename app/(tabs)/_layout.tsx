@@ -1,43 +1,60 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons'; // Iconos que ya vienen con Expo
+import { Ionicons } from '@expo/vector-icons';
 
-export default function TabLayout() {   
+export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#fff',      // Color del icono seleccionado
-        tabBarInactiveTintColor: '#666',    // Color de los iconos no seleccionados
+        headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#000',          // Fondo negro para el menú
-          borderTopColor: '#333',           // Línea arriba del menú
+          backgroundColor: '#000',
+          borderTopColor: '#1A1A1A',
           height: 60,
           paddingBottom: 10,
         },
-        headerStyle: {
-          backgroundColor: '#000',          // Fondo negro para la barra superior
-        },
-        headerTitleStyle: {
-          color: '#fff',                    // Texto blanco arriba
-          fontWeight: '900',
-        },
-      }}>
-      
-      {/* Pestaña de Ejercicios */}
+        tabBarActiveTintColor: '#A855F7',
+        tabBarInactiveTintColor: '#666',
+      }}
+    >
       <Tabs.Screen
         name="index"
         options={{
+          title: 'Rutinas',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="barbell-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      
+      <Tabs.Screen
+        name="workout"
+        options={{
           title: 'Entrenar',
-          tabBarIcon: ({ color }) => <Ionicons name="barbell" size={28} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="play-circle-outline" size={size} color={color} />
+          ),
         }}
       />
 
-      {/* Pestaña de Perfil */}
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Perfil',
-          tabBarIcon: ({ color }) => <Ionicons name="person" size={28} color={color} />,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* Ocultamos [id] de la barra de pestañas pero permitimos su navegación */}
+      <Tabs.Screen
+        name="[id]"
+        options={{
+          href: null, // Esto hace que no aparezca el icono en la barra
+          headerShown: true, // Mostramos el header para tener botón de "Volver"
+          headerStyle: { backgroundColor: '#000' },
+          headerTintColor: '#A855F7',
         }}
       />
     </Tabs>
