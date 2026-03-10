@@ -11,13 +11,12 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    // Verificar sesión inicial
+    // getSession() es síncrono desde cache — sin round-trip de red
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setInitialized(true);
     });
 
-    // Escuchar cambios de autenticación
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
     });
@@ -27,15 +26,11 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (!initialized) return;
-
-    // Detectar si el usuario está en el grupo de autenticación
     const inAuthGroup = segments[0] === '(auth)';
 
     if (!session && !inAuthGroup) {
-      // Si no hay sesión, siempre al login
       router.replace('/(auth)/login');
     } else if (session && inAuthGroup) {
-      // Si ya inició sesión, sacarlo del login hacia la app
       router.replace('/(tabs)');
     }
   }, [session, initialized, segments]);

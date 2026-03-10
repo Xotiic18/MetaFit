@@ -2,19 +2,24 @@ import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-export default function TabLayout() {
+export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: '#000',
+          backgroundColor: '#0A0A0A',
           borderTopColor: '#1A1A1A',
-          height: 60,
-          paddingBottom: 10,
+          borderTopWidth: 1,
+          height: 62,
+          paddingBottom: 8,
         },
         tabBarActiveTintColor: '#A855F7',
-        tabBarInactiveTintColor: '#666',
+        tabBarInactiveTintColor: '#444',
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+        },
       }}
     >
       <Tabs.Screen
@@ -26,17 +31,15 @@ export default function TabLayout() {
           ),
         }}
       />
-      
       <Tabs.Screen
         name="workout"
         options={{
-          title: 'Entrenar',
+          title: 'Nueva',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="play-circle-outline" size={size} color={color} />
+            <Ionicons name="add-circle-outline" size={size} color={color} />
           ),
         }}
       />
-
       <Tabs.Screen
         name="profile"
         options={{
@@ -46,16 +49,10 @@ export default function TabLayout() {
           ),
         }}
       />
-
-      {/* Ocultamos [id] de la barra de pestañas pero permitimos su navegación */}
+      {/* Ocultar la ruta dinámica de la tab bar */}
       <Tabs.Screen
         name="[id]"
-        options={{
-          href: null, // Esto hace que no aparezca el icono en la barra
-          headerShown: true, // Mostramos el header para tener botón de "Volver"
-          headerStyle: { backgroundColor: '#000' },
-          headerTintColor: '#A855F7',
-        }}
+        options={{ href: null }}
       />
     </Tabs>
   );

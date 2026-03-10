@@ -1,156 +1,214 @@
-import Logo from '../../components/Logo';
-import { PRESET_ROUTINES } from '../../constants/presets';
 import React, { useState, useCallback } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Alert, Modal, TextInput, ScrollView, StatusBar, Platform, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import {
+  View, Text, StyleSheet, FlatList, TouchableOpacity,
+  ActivityIndicator, Modal, TextInput, Alert
+} from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { getRoutinesFromStorage, saveRoutinesToStorage } from '../../services/storage';
+import { supabase } from '../../services/supabase';
+import { Ionicons } from '@expo/vector-icons';
 
-const PLAN_TEMPLATES = [
-  { id: 'p3', name: 'Full Body', days: 3 },
-  { id: 'p4', name: 'Torso/Pierna', days: 4 },
-  { id: 'p5', name: 'Push/Pull/Legs', days: 5 },
-  { id: 'p6', name: 'P/P/L Avanzado', days: 6 },
-];
-
-export default function RoutinesScreen() {
-  const [routines, setRoutines] = useState([]);
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [newRoutineName, setNewRoutineName] = useState('');
-  const router = useRouter();
-
-  useFocusEffect(useCallback(() => { loadRoutines(); }, []));
-
-  const loadRoutines = async () => {
-    const data = await getRoutinesFromStorage();
-    setRoutines(data || []);
-  };
-
-const handleCreateRoutine = async (templateId?: string) => {
-  const allRoutines = await getRoutinesFromStorage() || [];
-  let updatedRoutines = [...allRoutines];
-
-  if (templateId) {
-    // Buscamos la plantilla por ID (p3, p4, p5, p6)
-    const template = PRESET_ROUTINES.find(t => t.id === templateId);
-
-    if (template) {
-      // Por cada día en la plantilla, creamos una RUTINA INDEPENDIENTE
-      const newDays = template.days.map((day, index) => ({
-        id: (Date.now() + index).toString(), // IDs únicos para cada día
-        name: `${template.name}: ${day.dayName}`, // Ej: Torso/Pierna: Torso 1
-        exercises: day.exercises.map(ex => ({
-          ...ex,
-          instanceId: Math.random().toString(36).substr(2, 9),
-          sets: ex.sets || [{ id: '1', reps: '12', weight: '0', rest: '60' }]
-        }))
-      }));
-
-      updatedRoutines = [...newDays, ...updatedRoutines];
-      
-      if (Platform.OS !== 'web') {
-        Alert.alert("¡Plan Creado!", `Se han añadido ${newDays.length} días de entrenamiento a tu lista.`);
-      }
-    }
-  } else {
-    // Lógica para rutina personalizada (si no hay templateId)
-    if (!newRoutineName.trim()) return;
-    const customRoutine = {
-      id: Date.now().toString(),
-      name: newRoutineName,
-      exercises: []
-    };
-    updatedRoutines = [customRoutine, ...updatedRoutines];
-  }
-
-  // Guardar y actualizar estado
-  await saveRoutinesToStorage(updatedRoutines);
-  setRoutines(updatedRoutines);
-  setIsModalVisible(false);
-  setNewRoutineName('');
+type Routine = {
+  id: string;
+  name: string;
+  created_at: string;
+  user_id: string;
 };
 
-  const deleteRoutine = (id: string) => {
-    const eliminar = () => {
-        const updated = routines.filter(r => r.id !== id);
-        saveRoutinesToStorage(updated);
-        setRoutines(updated);
-    };
+export default function RoutinesScreen() {
+  const [routines, setRoutines] = useState<Routine[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [newRoutineName, setNewRoutineName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const router = useRouter();
 
-    if (Platform.OS === 'web') {
-      if (window.confirm("¿Borrar esta rutina?")) eliminar();
-    } else {
-      Alert.alert("Eliminar", "¿Borrar esta rutina?", [
-        { text: "No" },
-        { text: "Sí", style: "destructive", onPress: eliminar }
-      ]);
+  const fetchRoutines = async () => {
+    try {
+      // ✅ getSession() usa cache local — sin round-trip de red
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) return;
+
+      const { data, error } = await supabase
+        .from('routines')
+        .select('id, name, created_at, user_id')
+        .eq('user_id', session.user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setRoutines(data || []);
+    } catch (error: any) {
+      console.error('fetchRoutines:', error.message);
+    } finally {
+      setLoading(false);
     }
   };
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchRoutines();
+    }, [])
+  );
+
+  const createRoutine = async () => {
+    if (!newRoutineName.trim()) return;
+    setCreating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user) throw new Error('Sin sesión activa');
+
+      const { data, error } = await supabase
+        .from('routines')
+        .insert([{ name: newRoutineName.trim(), user_id: session.user.id }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // ✅ Actualizar lista localmente sin re-fetch
+      setRoutines(prev => [data, ...prev]);
+      setModalVisible(false);
+      setNewRoutineName('');
+      router.push(`/(tabs)/${data.id}`);
+    } catch (error: any) {
+      Alert.alert('Error', 'No se pudo crear la rutina');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const deleteRoutine = (id: string, name: string) => {
+    Alert.alert(
+      'Eliminar Rutina',
+      `¿Eliminar "${name}"? Se perderán todos sus ejercicios.`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Eliminar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { error } = await supabase
+                .from('routines')
+                .delete()
+                .eq('id', id);
+
+              if (error) throw error;
+
+              // ✅ Actualizar localmente — sin re-fetch a Supabase
+              setRoutines(prev => prev.filter(r => r.id !== id));
+            } catch {
+              Alert.alert('Error', 'No se pudo eliminar la rutina');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#A855F7" />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-
-<View style={styles.header}>
-<View style={styles.logoContainer}>
-  <Logo width={80} height={80} />
-  <Text style={styles.headerTitle}>MetaFit</Text>
-</View>
-
-  <TouchableOpacity style={styles.plusButton} onPress={() => setIsModalVisible(true)}>
-    <Ionicons name="add" size={30} color="#000" />
-  </TouchableOpacity>
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.title}>Mis Rutinas</Text>
+          <Text style={styles.subtitle}>Gestión de entrenamiento</Text>
+        </View>
+        <TouchableOpacity
+          style={styles.addButton}
+          onPress={() => setModalVisible(true)}
+          accessibilityLabel="Crear nueva rutina"
+          accessibilityRole="button"
+        >
+          <Ionicons name="add" size={30} color="#fff" />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={styles.label}>PLANES DE ENTRENAMIENTO</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.hScroll}>
-          {PLAN_TEMPLATES.map((plan) => (
-            <TouchableOpacity key={plan.id} style={styles.planCard} onPress={() => handleCreateRoutine(plan.id)}>
-              <View style={styles.planBadge}><Text style={styles.planBadgeText}>{plan.days}</Text></View>
-              <Text style={styles.planText}>{plan.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        <Text style={styles.label}>MIS ENTRENAMIENTOS</Text>
-        {routines.map((item) => (
-          <View key={item.id} style={styles.routineCard}>
-            <View style={styles.accentBar} />
-            <TouchableOpacity 
-              style={styles.cardContent} 
-              onPress={() => router.push({ pathname: `/${item.id}`, params: { name: item.name } })}
+      <FlatList
+        data={routines}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={routines.length === 0 ? { flex: 1 } : undefined}
+        renderItem={({ item }) => (
+          <View style={styles.routineCardContainer}>
+            <TouchableOpacity
+              style={styles.routineCard}
+              onPress={() => router.push(`/(tabs)/${item.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`Abrir rutina ${item.name}`}
             >
-              <Text style={styles.routineTitle}>{item.name}</Text>
-              <Text style={styles.exerciseCount}>{item.exercises?.length || 0} ejercicios</Text>
+              <View style={styles.cardInfo}>
+                <View style={styles.iconContainer}>
+                  <Ionicons name="barbell-outline" size={22} color="#A855F7" />
+                </View>
+                <Text style={styles.routineName}>{item.name}</Text>
+              </View>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.deleteBtn} onPress={() => deleteRoutine(item.id)}>
+
+            <TouchableOpacity
+              style={styles.deleteIconBtn}
+              onPress={() => deleteRoutine(item.id, item.name)}
+              hitSlop={10}
+              accessibilityLabel={`Eliminar rutina ${item.name}`}
+              accessibilityRole="button"
+            >
               <Ionicons name="trash-outline" size={20} color="#ff4444" />
             </TouchableOpacity>
           </View>
-        ))}
-      </ScrollView>
+        )}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <View style={styles.helperBox}>
+              <Ionicons name="arrow-up" size={30} color="#A855F7" style={styles.arrowIcon} />
+              <Text style={styles.helperTitle}>¡Empieza aquí!</Text>
+              <Text style={styles.helperText}>
+                Toca el botón{' '}
+                <Text style={{ color: '#A855F7', fontWeight: 'bold' }}>+</Text>
+                {' '}para crear tu primera rutina personalizada.
+              </Text>
+            </View>
+          </View>
+        }
+      />
 
-      {/* MODAL CREAR PERSONALIZADA */}
-      <Modal visible={isModalVisible} transparent animationType="fade">
+      <Modal animationType="fade" transparent visible={modalVisible} onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalHeader}>Nombre de la Rutina</Text>
-            <TextInput 
-                style={styles.modalInput} 
-                placeholder="Ej: Empuje Martes" 
-                placeholderTextColor="#666" 
-                value={newRoutineName} 
-                onChangeText={setNewRoutineName} 
-                autoFocus 
+            <Text style={styles.modalTitle}>Nueva Rutina</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Ej: Push Day, Pierna Fuerza..."
+              placeholderTextColor="#555"
+              value={newRoutineName}
+              onChangeText={setNewRoutineName}
+              autoFocus
+              maxLength={50}
+              onSubmitEditing={createRoutine}
+              returnKeyType="done"
             />
-            <View style={{flexDirection: 'row', gap: 10}}>
-               <TouchableOpacity style={[styles.modalBtn, {backgroundColor: '#333'}]} onPress={() => setIsModalVisible(false)}>
-                   <Text style={{color: '#fff'}}>Cancelar</Text>
-               </TouchableOpacity>
-               <TouchableOpacity style={styles.modalBtn} onPress={() => handleCreateRoutine()}>
-                   <Text style={{fontWeight: 'bold', color: '#000'}}>Crear</Text>
-               </TouchableOpacity>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.cancelBtn}
+                onPress={() => { setModalVisible(false); setNewRoutineName(''); }}
+                disabled={creating}
+              >
+                <Text style={styles.cancelBtnText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.createBtn, creating && { opacity: 0.6 }]}
+                onPress={createRoutine}
+                disabled={creating}
+              >
+                {creating
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.createBtnText}>Crear</Text>
+                }
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -160,34 +218,30 @@ const handleCreateRoutine = async (templateId?: string) => {
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: '#000', 
-    paddingTop: 60,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 500 
-  },
-  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, alignItems: 'center', marginBottom: 25 },
-  logoContainer:{ flexDirection: 'row', alignItems: 'center', gap: 12 },
-  logoImage: { width: 120, height: 120, borderRadius: 8 },
-  headerTitle: { color: '#fff', fontSize: 26, fontWeight: '900', letterSpacing: -1 },
-  plusButton: { backgroundColor: '#A855F7', width: 45, height: 45, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  label: { color: '#94A3B8', fontSize: 11, fontWeight: 'bold', marginLeft: 20, marginBottom: 15, letterSpacing: 1.2 },
-  hScroll: { paddingLeft: 20, gap: 12, paddingBottom: 10 },
-  planCard: { backgroundColor: '#1c1c1e', padding: 15, borderRadius: 20, width: 125, height: 105, justifyContent: 'center', alignItems: 'center' },
-  planBadge: { backgroundColor: '#A855F7', paddingHorizontal: 8, borderRadius: 6, marginBottom: 6 },
-  planBadgeText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-  planText: { color: '#fff', fontSize: 12, fontWeight: 'bold', textAlign: 'center' },
-  routineCard: { backgroundColor: '#1c1c1e', marginHorizontal: 20, marginBottom: 12, borderRadius: 15, flexDirection: 'row', overflow: 'hidden', height: 85 },
-  accentBar: { width: 5, backgroundColor: '#A855F7' },
-  cardContent: { flex: 1, paddingLeft: 15, justifyContent: 'center' },
-  routineTitle: { color: '#fff', fontSize: 17, fontWeight: 'bold' },
-  exerciseCount: { color: '#A855F7', fontSize: 12, marginTop: 4 },
-  deleteBtn: { width: 55, justifyContent: 'center', alignItems: 'center', borderLeftWidth: 1, borderLeftColor: '#2c2c2e' },
+  container: { flex: 1, backgroundColor: '#000', paddingHorizontal: 20, paddingTop: 60 },
+  center: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 30 },
+  title: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
+  subtitle: { color: '#A855F7', fontSize: 13 },
+  addButton: { backgroundColor: '#A855F7', width: 50, height: 50, borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  routineCardContainer: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  routineCard: { flex: 1, backgroundColor: '#0A0A0A', padding: 18, borderRadius: 18, borderWidth: 1, borderColor: '#1A1A1A' },
+  cardInfo: { flexDirection: 'row', alignItems: 'center' },
+  iconContainer: { backgroundColor: '#1A1A1A', padding: 10, borderRadius: 12, marginRight: 15 },
+  routineName: { color: '#fff', fontSize: 17, fontWeight: '600' },
+  deleteIconBtn: { padding: 15, marginLeft: 5 },
+  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', marginTop: 20 },
+  helperBox: { backgroundColor: '#0A0A0A', padding: 25, borderRadius: 20, borderWidth: 1, borderColor: '#A855F744', borderStyle: 'dashed', alignItems: 'center', width: '100%' },
+  arrowIcon: { position: 'absolute', top: -35, right: 10 },
+  helperTitle: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 10 },
+  helperText: { color: '#888', textAlign: 'center', lineHeight: 20 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#1c1c1e', width: '85%', padding: 25, borderRadius: 25, borderWidth: 1, borderColor: '#333' },
-  modalHeader: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
-  modalInput: { backgroundColor: '#2c2c2e', color: '#fff', padding: 15, borderRadius: 12, marginBottom: 20, borderWidth: 1, borderColor: '#444' },
-  modalBtn: { backgroundColor: '#A855F7', flex: 1, padding: 15, borderRadius: 12, alignItems: 'center' }
+  modalContent: { backgroundColor: '#111', width: '85%', padding: 25, borderRadius: 25, borderWidth: 1, borderColor: '#222' },
+  modalTitle: { color: '#fff', fontSize: 22, fontWeight: 'bold', marginBottom: 20, textAlign: 'center' },
+  modalInput: { backgroundColor: '#000', color: '#fff', padding: 18, borderRadius: 15, marginBottom: 25, borderWidth: 1, borderColor: '#333' },
+  modalButtons: { flexDirection: 'row', justifyContent: 'space-between' },
+  cancelBtn: { flex: 1, alignItems: 'center', padding: 15 },
+  cancelBtnText: { color: '#555', fontWeight: 'bold' },
+  createBtn: { flex: 1, backgroundColor: '#A855F7', padding: 15, borderRadius: 15, alignItems: 'center' },
+  createBtnText: { color: '#fff', fontWeight: 'bold' },
 });
