@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform,
+  TextInput, Alert, ActivityIndicator, KeyboardAvoidingView,
+  Platform, Animated,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { supabase } from '../../services/supabase';
@@ -15,21 +16,17 @@ type ExerciseRow = {
   reps: number;
   weight_kg: number;
   rest_seconds: number;
-  exercises: {
-    id: string;
-    name: string;
-  } | null;
+  exercises: { id: string; name: string } | null;
 };
 
-type Routine = {
-  id: string;
-  name: string;
-};
+type Routine = { id: string; name: string };
 
+// ✅ Edwyn: rest_seconds ahora es editable
 type LocalEdit = {
   sets: string;
   reps: string;
   weight_kg: string;
+  rest_seconds: string;
 };
 
 export default function RoutineDetailScreen() {
@@ -41,12 +38,30 @@ export default function RoutineDetailScreen() {
   const [isAdding, setIsAdding] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [catalogVisible, setCatalogVisible] = useState(false);
-  const [finishing, setFinishing] = useState(false); // ← nuevo
+  const [finishing, setFinishing] = useState(false);
 
   const [timeLeft, setTimeLeft] = useState(90);
   const [isTimerActive, setIsTimerActive] = useState(false);
+  // ✅ David: estado para notificación visual al terminar
+  const [timerFinished, setTimerFinished] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // ✅ David: animación de pulso cuando termina el timer
+  const pulseAnim = useRef(new Animated.Value(1)).current;
   const router = useRouter();
+
+  // ✅ David: pulso animado cuando el timer termina
+  useEffect(() => {
+    if (timerFinished) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.06, duration: 400, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      pulseAnim.setValue(1);
+    }
+  }, [timerFinished]);
 
   useEffect(() => {
     if (!isTimerActive) return;
@@ -55,6 +70,8 @@ export default function RoutineDetailScreen() {
         if (prev <= 1) {
           setIsTimerActive(false);
           clearInterval(timerRef.current!);
+          // ✅ David: activar notificación visual
+          setTimerFinished(true);
           return 0;
         }
         return prev - 1;
@@ -67,11 +84,13 @@ export default function RoutineDetailScreen() {
     if (timerRef.current) clearInterval(timerRef.current);
     setTimeLeft(seconds);
     setIsTimerActive(true);
+    setTimerFinished(false);
   };
 
   const stopTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
     setIsTimerActive(false);
+    setTimerFinished(false);
   };
 
   useEffect(() => {
@@ -106,10 +125,12 @@ export default function RoutineDetailScreen() {
           sets: ex.sets.toString(),
           reps: ex.reps.toString(),
           weight_kg: ex.weight_kg.toString(),
+          // ✅ Edwyn: inicializar rest_seconds
+          rest_seconds: ex.rest_seconds.toString(),
         };
       });
       setLocalEdits(initialEdits);
-    } catch (error: any) {
+    } catch {
       Alert.alert('Error', 'No se pudieron cargar los datos.');
     } finally {
       setLoading(false);
@@ -145,20 +166,18 @@ export default function RoutineDetailScreen() {
       setExercises(prev =>
         prev.map(ex => ex.id === exerciseId ? { ...ex, [field]: sanitized } : ex)
       );
-    } catch (error: any) {
+    } catch {
       Alert.alert('Error', 'No se pudo guardar el cambio');
     } finally {
       setTimeout(() => setSavingId(null), 500);
     }
   };
 
-  // ✅ Finalizar entrenamiento — guarda sesión + logs
   const finishWorkout = () => {
     if (exercises.length === 0) {
       Alert.alert('Sin ejercicios', 'Agrega al menos un ejercicio antes de finalizar.');
       return;
     }
-
     Alert.alert(
       '¡Finalizar entrenamiento!',
       `¿Guardar sesión de "${routine?.name}"?`,
@@ -172,7 +191,6 @@ export default function RoutineDetailScreen() {
               const { data: { session } } = await supabase.auth.getSession();
               if (!session?.user) throw new Error('Sin sesión');
 
-              // 1. Crear sesión de entrenamiento
               const { data: workoutSession, error: sessionError } = await supabase
                 .from('workout_sessions')
                 .insert([{
@@ -180,12 +198,9 @@ export default function RoutineDetailScreen() {
                   routine_id: routine!.id,
                   routine_name: routine!.name,
                 }])
-                .select()
-                .single();
-
+                .select().single();
               if (sessionError) throw sessionError;
 
-              // 2. Guardar log de cada ejercicio con peso/series actuales
               const logs = exercises
                 .filter(ex => ex.exercises !== null)
                 .map(ex => ({
@@ -199,8 +214,7 @@ export default function RoutineDetailScreen() {
 
               if (logs.length > 0) {
                 const { error: logsError } = await supabase
-                  .from('workout_logs')
-                  .insert(logs);
+                  .from('workout_logs').insert(logs);
                 if (logsError) throw logsError;
               }
 
@@ -208,12 +222,13 @@ export default function RoutineDetailScreen() {
               Alert.alert(
                 '🎉 ¡Entrenamiento completado!',
                 `Sesión guardada con ${logs.length} ejercicios.`,
-                [{ text: 'Ver progreso', onPress: () => router.replace('/(tabs)/profile') },
-                 { text: 'Continuar', style: 'cancel' }]
+                [
+                  { text: 'Ver progreso', onPress: () => router.replace('/(tabs)/profile') },
+                  { text: 'Continuar', style: 'cancel' },
+                ]
               );
-            } catch (error: any) {
+            } catch {
               Alert.alert('Error', 'No se pudo guardar la sesión');
-              console.error('finishWorkout:', error.message);
             } finally {
               setFinishing(false);
             }
@@ -230,10 +245,7 @@ export default function RoutineDetailScreen() {
     try {
       let exerciseId: string;
       const { data: existing } = await supabase
-        .from('exercises')
-        .select('id')
-        .eq('name', selectedExercise.name)
-        .maybeSingle();
+        .from('exercises').select('id').eq('name', selectedExercise.name).maybeSingle();
 
       if (existing) {
         exerciseId = existing.id;
@@ -241,19 +253,17 @@ export default function RoutineDetailScreen() {
         const { data: newEx, error: exError } = await supabase
           .from('exercises')
           .insert([{ name: selectedExercise.name, muscle_group: selectedExercise.muscleGroup }])
-          .select('id')
-          .single();
+          .select('id').single();
         if (exError) throw exError;
         exerciseId = newEx.id;
       }
 
-      const nextPosition = exercises.length;
       const { data: link, error: linkError } = await supabase
         .from('routine_exercises')
         .insert([{
           routine_id: id,
           exercise_id: exerciseId,
-          position: nextPosition,
+          position: exercises.length,
           sets: 3, reps: 10, weight_kg: 0, rest_seconds: 90,
         }])
         .select('id, position, sets, reps, weight_kg, rest_seconds')
@@ -267,7 +277,8 @@ export default function RoutineDetailScreen() {
       setExercises(prev => [...prev, fullRow]);
       setLocalEdits(prev => ({
         ...prev,
-        [link.id]: { sets: '3', reps: '10', weight_kg: '0' },
+        // ✅ Edwyn: incluir rest_seconds en el edit local
+        [link.id]: { sets: '3', reps: '10', weight_kg: '0', rest_seconds: '90' },
       }));
     } catch (error: any) {
       Alert.alert('Error', error.message);
@@ -276,6 +287,7 @@ export default function RoutineDetailScreen() {
     }
   };
 
+  // ✅ David: borrado con confirmación
   const deleteExercise = (exerciseId: string) => {
     Alert.alert('Eliminar', '¿Borrar este ejercicio?', [
       { text: 'No', style: 'cancel' },
@@ -285,7 +297,12 @@ export default function RoutineDetailScreen() {
             .from('routine_exercises').delete().eq('id', exerciseId);
           if (error) { Alert.alert('Error', 'No se pudo eliminar'); return; }
           setExercises(prev => prev.filter(ex => ex.id !== exerciseId));
-        }
+          setLocalEdits(prev => {
+            const copy = { ...prev };
+            delete copy[exerciseId];
+            return copy;
+          });
+        },
       },
     ]);
   };
@@ -320,7 +337,7 @@ export default function RoutineDetailScreen() {
             {exercises.length} ejercicio{exercises.length !== 1 ? 's' : ''}
           </Text>
         </View>
-        {!isTimerActive && (
+        {!isTimerActive && !timerFinished && (
           <TouchableOpacity onPress={() => startTimer(90)} style={styles.timerToggle}>
             <Ionicons name="timer-outline" size={24} color="#A855F7" />
           </TouchableOpacity>
@@ -336,7 +353,7 @@ export default function RoutineDetailScreen() {
           <View style={styles.emptyContainer}>
             <Ionicons name="barbell-outline" size={40} color="#333" />
             <Text style={styles.emptyText}>Sin ejercicios aún</Text>
-            <Text style={styles.emptySubtext}>Toca "Agregar ejercicio" para empezar</Text>
+            <Text style={styles.emptySubtext}>Toca "Agregar" para empezar</Text>
           </View>
         }
         renderItem={({ item }) => {
@@ -344,6 +361,7 @@ export default function RoutineDetailScreen() {
             sets: item.sets.toString(),
             reps: item.reps.toString(),
             weight_kg: item.weight_kg.toString(),
+            rest_seconds: item.rest_seconds.toString(),
           };
           return (
             <View style={[styles.exerciseCard, savingId === item.id && styles.savingCard]}>
@@ -366,6 +384,8 @@ export default function RoutineDetailScreen() {
                   </TouchableOpacity>
                 </View>
               </View>
+
+              {/* ✅ Edwyn: 4 campos editables — SERIES, REPS, PESO, DESCANSO */}
               <View style={styles.controlsRow}>
                 <View style={styles.controlGroup}>
                   <Text style={styles.controlLabel}>SERIES</Text>
@@ -380,6 +400,7 @@ export default function RoutineDetailScreen() {
                     />
                   </View>
                 </View>
+
                 <View style={styles.controlGroup}>
                   <Text style={styles.controlLabel}>REPS</Text>
                   <View style={styles.counter}>
@@ -393,6 +414,7 @@ export default function RoutineDetailScreen() {
                     />
                   </View>
                 </View>
+
                 <View style={styles.controlGroup}>
                   <Text style={styles.controlLabel}>PESO (KG)</Text>
                   <View style={styles.counter}>
@@ -406,28 +428,58 @@ export default function RoutineDetailScreen() {
                     />
                   </View>
                 </View>
+
+                {/* ✅ Edwyn: campo DESCANSO editable */}
+                <View style={styles.controlGroup}>
+                  <Text style={styles.controlLabel}>DESC (S)</Text>
+                  <View style={styles.counter}>
+                    <TextInput
+                      style={[styles.counterInput, { color: '#22c55e' }]}
+                      keyboardType="numeric"
+                      value={edit.rest_seconds}
+                      onChangeText={(val) => handleLocalChange(item.id, 'rest_seconds', val)}
+                      onBlur={() => commitUpdate(item.id, 'rest_seconds')}
+                      selectTextOnFocus
+                    />
+                  </View>
+                </View>
               </View>
             </View>
           );
         }}
       />
 
-      {isTimerActive && (
-        <View style={styles.timerContainer}>
-          <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
-          <TouchableOpacity
-            onPress={() => setTimeLeft(prev => prev + 30)}
-            style={styles.timerBtnSmall}
-          >
-            <Text style={styles.timerBtnText}>+30s</Text>
-          </TouchableOpacity>
+      {/* ✅ David: timer con notificación visual al terminar */}
+      {(isTimerActive || timerFinished) && (
+        <Animated.View
+          style={[
+            styles.timerContainer,
+            timerFinished && styles.timerContainerFinished,
+            { transform: [{ scale: pulseAnim }] },
+          ]}
+        >
+          {timerFinished ? (
+            <>
+              <Ionicons name="checkmark-circle" size={26} color="#fff" style={{ marginLeft: 10 }} />
+              <Text style={[styles.timerText, { fontSize: 18 }]}>¡Descanso terminado!</Text>
+            </>
+          ) : (
+            <Text style={styles.timerText}>{formatTime(timeLeft)}</Text>
+          )}
+          {!timerFinished && (
+            <TouchableOpacity
+              onPress={() => setTimeLeft(prev => prev + 30)}
+              style={styles.timerBtnSmall}
+            >
+              <Text style={styles.timerBtnText}>+30s</Text>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity onPress={stopTimer} style={styles.timerBtnStop}>
             <Ionicons name="close" size={20} color="#fff" />
           </TouchableOpacity>
-        </View>
+        </Animated.View>
       )}
 
-      {/* Botones inferiores */}
       <View style={styles.bottomRow}>
         <TouchableOpacity
           style={[styles.addCatalogBtn, isAdding && { opacity: 0.6 }]}
@@ -441,7 +493,6 @@ export default function RoutineDetailScreen() {
           <Text style={styles.addCatalogText}>Agregar</Text>
         </TouchableOpacity>
 
-        {/* ✅ Botón finalizar entrenamiento */}
         <TouchableOpacity
           style={[styles.finishBtn, finishing && { opacity: 0.6 }]}
           onPress={finishWorkout}
@@ -472,6 +523,7 @@ const styles = StyleSheet.create({
   title: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   subtitle: { color: '#A855F7', fontSize: 12 },
   timerToggle: { backgroundColor: '#1A1A1A', padding: 10, borderRadius: 12 },
+
   exerciseCard: {
     backgroundColor: '#0A0A0A', padding: 15, borderRadius: 16,
     marginBottom: 10, borderWidth: 1, borderColor: '#1A1A1A',
@@ -479,18 +531,21 @@ const styles = StyleSheet.create({
   savingCard: { borderColor: '#A855F7', backgroundColor: '#0D0A12' },
   exerciseHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 15,
+    alignItems: 'center', marginBottom: 12,
   },
   headerActions: { flexDirection: 'row', alignItems: 'center' },
   exerciseName: { color: '#fff', fontSize: 16, fontWeight: 'bold', flex: 1 },
+
   controlsRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  controlGroup: { alignItems: 'center', flex: 1, marginHorizontal: 5 },
-  controlLabel: { color: '#444', fontSize: 10, fontWeight: 'bold', marginBottom: 5 },
+  controlGroup: { alignItems: 'center', flex: 1, marginHorizontal: 3 },
+  controlLabel: { color: '#444', fontSize: 9, fontWeight: 'bold', marginBottom: 5 },
   counter: { backgroundColor: '#111', borderRadius: 10, width: '100%' },
   counterInput: {
-    color: '#fff', fontSize: 16, fontWeight: 'bold',
+    color: '#fff', fontSize: 15, fontWeight: 'bold',
     textAlign: 'center', paddingVertical: 10,
   },
+
+  // ✅ David: timer base
   timerContainer: {
     position: 'absolute', bottom: 90, left: 20, right: 20,
     backgroundColor: '#A855F7', borderRadius: 20, padding: 12,
@@ -498,6 +553,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between', elevation: 10,
     shadowColor: '#A855F7', shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.4, shadowRadius: 10,
+  },
+  // ✅ David: timer terminado — verde para indicar que ya puede seguir
+  timerContainerFinished: {
+    backgroundColor: '#16a34a',
+    shadowColor: '#16a34a',
   },
   timerText: { color: '#fff', fontSize: 24, fontWeight: 'bold', flex: 1, marginLeft: 10 },
   timerBtnSmall: {
@@ -507,11 +567,7 @@ const styles = StyleSheet.create({
   timerBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
   timerBtnStop: { backgroundColor: 'rgba(0,0,0,0.3)', padding: 8, borderRadius: 10 },
 
-  // Botones inferiores
-  bottomRow: {
-    flexDirection: 'row', gap: 10,
-    paddingVertical: 15,
-  },
+  bottomRow: { flexDirection: 'row', gap: 10, paddingVertical: 15 },
   addCatalogBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 6,
@@ -522,8 +578,7 @@ const styles = StyleSheet.create({
   finishBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 6,
-    backgroundColor: '#A855F7',
-    paddingVertical: 13, borderRadius: 14,
+    backgroundColor: '#A855F7', paddingVertical: 13, borderRadius: 14,
   },
   finishBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 

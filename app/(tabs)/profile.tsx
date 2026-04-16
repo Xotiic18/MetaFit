@@ -56,7 +56,6 @@ export default function ProfileScreen() {
       hace7Dias.setDate(hace7Dias.getDate() - 7);
       const hace7DiasISO = hace7Dias.toISOString();
 
-      // ── 1. Sesiones de los últimos 7 días ──────────────────
       const { data: sessionData, error: sError } = await supabase
         .from('workout_sessions')
         .select('id, routine_name, completed_at')
@@ -66,7 +65,6 @@ export default function ProfileScreen() {
 
       if (sError) throw sError;
 
-      // ── 2. Logs de esas sesiones ────────────────────────────
       const sessionIds = (sessionData || []).map(s => s.id);
       let logsData: any[] = [];
 
@@ -81,19 +79,15 @@ export default function ProfileScreen() {
         logsData = logs || [];
       }
 
-      // ── 3. Calcular stats ───────────────────────────────────
-
       // Volumen total = suma(sets * reps * weight_kg)
       const totalVolumen = logsData.reduce((acc, log) => {
         return acc + (log.sets * log.reps * log.weight_kg);
       }, 0);
 
-      // Días únicos entrenados
       const diasUnicos = new Set(
         (sessionData || []).map(s => s.completed_at.split('T')[0])
       );
 
-      // Racha actual — días consecutivos hasta hoy
       const sortedDays = Array.from(diasUnicos).sort().reverse();
       let racha = 0;
       const hoy = new Date();
@@ -108,7 +102,6 @@ export default function ProfileScreen() {
         }
       }
 
-      // Sesiones con conteo de ejercicios
       const sessionList: Session[] = (sessionData || []).map(s => ({
         id: s.id,
         routine_name: s.routine_name,
@@ -116,7 +109,6 @@ export default function ProfileScreen() {
         ejercicios: logsData.filter(l => l.session_id === s.id).length,
       }));
 
-      // Progreso por ejercicio — último peso registrado por ejercicio único
       const exerciseMap = new Map<string, ExerciseProgress>();
       logsData.forEach(log => {
         if (!exerciseMap.has(log.exercise_name)) {

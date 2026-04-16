@@ -24,7 +24,6 @@ export default function RoutinesScreen() {
 
   const fetchRoutines = async () => {
     try {
-      // ✅ getSession() usa cache local — sin round-trip de red
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
@@ -41,7 +40,7 @@ export default function RoutinesScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }; 
 
   useFocusEffect(
     useCallback(() => {
@@ -64,7 +63,6 @@ export default function RoutinesScreen() {
 
       if (error) throw error;
 
-      // ✅ Actualizar lista localmente sin re-fetch
       setRoutines(prev => [data, ...prev]);
       setModalVisible(false);
       setNewRoutineName('');
@@ -94,7 +92,6 @@ export default function RoutinesScreen() {
 
               if (error) throw error;
 
-              // ✅ Actualizar localmente — sin re-fetch a Supabase
               setRoutines(prev => prev.filter(r => r.id !== id));
             } catch {
               Alert.alert('Error', 'No se pudo eliminar la rutina');

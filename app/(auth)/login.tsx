@@ -1,8 +1,5 @@
 import React, { useState } from 'react';
-import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet,
-  Alert, ActivityIndicator, KeyboardAvoidingView, Platform
-} from 'react-native';
+import {View, Text, TextInput, TouchableOpacity, StyleSheet,Alert, ActivityIndicator, KeyboardAvoidingView, Platform} from 'react-native';
 import { supabase } from '../../services/supabase';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,7 +39,6 @@ export default function LoginScreen() {
 
         if (error) throw error;
 
-        // Si hay sesión activa, ir directo (confirmación de email desactivada en Supabase)
         if (data.session) {
           router.replace('/(tabs)');
         } else {

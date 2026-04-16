@@ -49,11 +49,9 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
   }, [search, selectedGroup]);
 
   const handleSelect = (exercise: ExerciseWithGroup) => {
-    // 1. Cerrar preview inmediatamente si está abierto
     setPreviewExercise(null);
 
-    // 2. Pequeño delay para que React Native desmonte el modal interior
-    //    antes de cerrar el modal exterior
+
     setTimeout(() => {
       onSelectExercise(exercise);
       onClose();
@@ -69,7 +67,6 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
     >
       <SafeAreaView style={styles.container}>
 
-        {/* Header */}
         <View style={styles.header}>
           <View>
             <Text style={styles.title}>Catálogo</Text>
@@ -82,10 +79,8 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
           </TouchableOpacity>
         </View>
 
-        {/* Buscador + Filtro en la misma fila */}
         <View style={styles.controlsRow}>
 
-          {/* Buscador */}
           <View style={styles.searchContainer}>
             <Ionicons name="search-outline" size={16} color="#888" style={{ marginRight: 8 }} />
             <TextInput
@@ -99,7 +94,6 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
             />
           </View>
 
-          {/* Botón selector de grupo muscular */}
           <TouchableOpacity
             style={styles.groupSelector}
             onPress={() => setShowGroupPicker(true)}
@@ -113,7 +107,6 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
 
         </View>
 
-        {/* Lista de ejercicios */}
         <FlatList
           data={filteredExercises}
           keyExtractor={(item) => item.id}
@@ -156,7 +149,6 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
           )}
         />
 
-        {/* Picker de grupo muscular — Modal simple */}
         <Modal
           visible={showGroupPicker}
           transparent
@@ -200,7 +192,6 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
           </TouchableOpacity>
         </Modal>
 
-        {/* Preview GIF */}
         {previewExercise && (
           <Modal
             visible={!!previewExercise}

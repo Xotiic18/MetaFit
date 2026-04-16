@@ -63,7 +63,6 @@ export default function WorkoutScreen() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('No hay sesión activa');
 
-      // 1. Crear la rutina
       const { data: routine, error: rError } = await supabase
         .from('routines')
         .insert([{ name: template.name, user_id: session.user.id }])
@@ -71,7 +70,6 @@ export default function WorkoutScreen() {
         .single();
       if (rError) throw rError;
 
-      // 2. Insertar nombres en tabla exercises y obtener sus IDs
       const exerciseInserts = template.exercises.map(name => ({ name }));
       const { data: createdExercises, error: exError } = await supabase
         .from('exercises')
@@ -79,14 +77,13 @@ export default function WorkoutScreen() {
         .select('id, name');
       if (exError) throw exError;
 
-      // 3. Vincular ejercicios a la rutina en routine_exercises
       const links = createdExercises.map((ex, index) => ({
         routine_id: routine.id,
         exercise_id: ex.id,
         position: index,
         sets: 3,
         reps: 10,
-        weight_kg: 0,       // ✅ nombre real de la columna
+        weight_kg: 0,       
         rest_seconds: 90,
       }));
 
@@ -103,7 +100,6 @@ export default function WorkoutScreen() {
       throw new Error(`RLS bloqueó el insert. ¿routine_id pertenece al usuario? routine_id: ${routine.id}`);
 }
 
-      // 4. Ir directo a la rutina con ejercicios listos
       router.push(`/(tabs)/${routine.id}`);
 
     } catch (error: any) {
