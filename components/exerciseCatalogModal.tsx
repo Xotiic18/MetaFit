@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   View, Text, StyleSheet, Modal, TextInput, FlatList,
   TouchableOpacity, Image, SafeAreaView, ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { EXERCISES_DATABASE } from '../constants/exercises';
@@ -23,6 +24,28 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSelectExercise: (exercise: ExerciseWithGroup) => void;
+}
+
+function LazyImage({ source, style }: { source: any; style: any }) {
+  const [loaded, setLoaded] = useState(false);
+  return (
+    <View style={style}>
+      {!loaded && (
+        <View style={[style, {
+          position: 'absolute', backgroundColor: '#1A1A1A',
+          justifyContent: 'center', alignItems: 'center',
+        }]}>
+          <ActivityIndicator size="small" color="#A855F744" />
+        </View>
+      )}
+      <Image
+        source={source}
+        style={[style, { opacity: loaded ? 1 : 0 }]}
+        resizeMode="cover"
+        onLoad={() => setLoaded(true)}
+      />
+    </View>
+  );
 }
 
 export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Props) {
@@ -50,8 +73,6 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
 
   const handleSelect = (exercise: ExerciseWithGroup) => {
     setPreviewExercise(null);
-
-
     setTimeout(() => {
       onSelectExercise(exercise);
       onClose();
@@ -80,7 +101,6 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
         </View>
 
         <View style={styles.controlsRow}>
-
           <View style={styles.searchContainer}>
             <Ionicons name="search-outline" size={16} color="#888" style={{ marginRight: 8 }} />
             <TextInput
@@ -93,7 +113,6 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
               clearButtonMode="while-editing"
             />
           </View>
-
           <TouchableOpacity
             style={styles.groupSelector}
             onPress={() => setShowGroupPicker(true)}
@@ -104,15 +123,19 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
             </Text>
             <Ionicons name="chevron-down" size={14} color="#A855F7" />
           </TouchableOpacity>
-
         </View>
 
+        {/* ✅ fix 2: un solo renderItem completo */}
         <FlatList
           data={filteredExercises}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={8}
+          initialNumToRender={6}
+          windowSize={5}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Ionicons name="search-outline" size={40} color="#333" />
@@ -130,7 +153,7 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
               activeOpacity={0.7}
             >
               <View style={styles.gifContainer}>
-                <Image source={item.gif} style={styles.gif} resizeMode="cover" />
+                <LazyImage source={item.gif} style={styles.gif} />
               </View>
               <View style={styles.exerciseInfo}>
                 <Text style={styles.exerciseName}>{item.name}</Text>
@@ -234,7 +257,6 @@ export function ExerciseCatalogModal({ visible, onClose, onSelectExercise }: Pro
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
-
   header: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', paddingHorizontal: 20,
@@ -246,56 +268,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A1A', width: 36, height: 36,
     borderRadius: 18, justifyContent: 'center', alignItems: 'center',
   },
-
-  // Fila de controles
   controlsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 15,
-    gap: 10,
-    alignItems: 'center',
+    flexDirection: 'row', paddingHorizontal: 20,
+    marginBottom: 15, gap: 10, alignItems: 'center',
   },
   searchContainer: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#111',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#2A2A2A',
-    height: 46,
+    flex: 1, flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#111', borderRadius: 12,
+    paddingHorizontal: 12, borderWidth: 1, borderColor: '#2A2A2A', height: 46,
   },
   searchInput: { flex: 1, color: '#fff', fontSize: 14 },
-
-  // Selector de grupo
   groupSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#111',
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: '#A855F755',
-    height: 46,
-    gap: 6,
-    maxWidth: 130,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#111', borderRadius: 12,
+    paddingHorizontal: 12, borderWidth: 1,
+    borderColor: '#A855F755', height: 46, gap: 6, maxWidth: 130,
   },
-  groupSelectorText: {
-    color: '#A855F7',
-    fontSize: 13,
-    fontWeight: '600',
-    flex: 1,
-  },
-
-  // Lista
+  groupSelectorText: { color: '#A855F7', fontSize: 13, fontWeight: '600', flex: 1 },
   listContent: { paddingHorizontal: 20, paddingBottom: 30 },
-
   exerciseCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#0A0A0A', borderRadius: 14,
-    marginBottom: 10, borderWidth: 1, borderColor: '#1A1A1A',
-    overflow: 'hidden',
+    marginBottom: 10, borderWidth: 1, borderColor: '#1A1A1A', overflow: 'hidden',
   },
   gifContainer: { width: 72, height: 72, backgroundColor: '#111' },
   gif: { width: '100%', height: '100%' },
@@ -308,69 +302,24 @@ const styles = StyleSheet.create({
   },
   muscleTagText: { color: '#A855F7', fontSize: 11, fontWeight: '700' },
   addBtn: { paddingHorizontal: 14 },
-
-  // Picker bottom sheet
-  pickerOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
-  },
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'flex-end' },
   pickerContainer: {
-    backgroundColor: '#111',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingBottom: 40,
-    paddingTop: 12,
-    borderWidth: 1,
-    borderColor: '#222',
-    maxHeight: '60%',
+    backgroundColor: '#111', borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingBottom: 40, paddingTop: 12, borderWidth: 1, borderColor: '#222', maxHeight: '60%',
   },
-  pickerHandle: {
-    width: 40, height: 4,
-    backgroundColor: '#333',
-    borderRadius: 2,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  pickerTitle: {
-    color: '#888', fontSize: 12,
-    fontWeight: '700', textTransform: 'uppercase',
-    letterSpacing: 1, paddingHorizontal: 20,
-    marginBottom: 8,
-  },
-  pickerItem: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 16, paddingHorizontal: 20,
-    borderBottomWidth: 1, borderBottomColor: '#1A1A1A',
-  },
+  pickerHandle: { width: 40, height: 4, backgroundColor: '#333', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  pickerTitle: { color: '#888', fontSize: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, paddingHorizontal: 20, marginBottom: 8 },
+  pickerItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#1A1A1A' },
   pickerItemActive: { backgroundColor: '#A855F711' },
   pickerItemText: { color: '#ccc', fontSize: 16 },
   pickerItemTextActive: { color: '#A855F7', fontWeight: '700' },
-
-  // Preview
-  previewOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.92)',
-    justifyContent: 'center', alignItems: 'center', padding: 30,
-  },
-  previewCard: {
-    backgroundColor: '#111', borderRadius: 24, padding: 24,
-    alignItems: 'center', width: '100%',
-    borderWidth: 1, borderColor: '#222',
-  },
+  previewOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center', padding: 30 },
+  previewCard: { backgroundColor: '#111', borderRadius: 24, padding: 24, alignItems: 'center', width: '100%', borderWidth: 1, borderColor: '#222' },
   previewGif: { width: 240, height: 240, borderRadius: 16, marginBottom: 18 },
-  previewName: {
-    color: '#fff', fontSize: 18, fontWeight: 'bold',
-    textAlign: 'center', marginBottom: 10,
-  },
-  previewAddBtn: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: '#A855F7', paddingHorizontal: 24,
-    paddingVertical: 13, borderRadius: 14, marginTop: 20, gap: 8,
-  },
+  previewName: { color: '#fff', fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 10 },
+  previewAddBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#A855F7', paddingHorizontal: 24, paddingVertical: 13, borderRadius: 14, marginTop: 20, gap: 8 },
   previewAddText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
   previewHint: { color: '#444', fontSize: 12, marginTop: 14 },
-
   emptyContainer: { alignItems: 'center', paddingTop: 60, gap: 12 },
   emptyText: { color: '#444', fontSize: 15, textAlign: 'center' },
 });

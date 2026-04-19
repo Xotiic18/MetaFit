@@ -28,21 +28,18 @@ type ExerciseProgress = {
 };
 
 export default function ProfileScreen() {
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]     = useState(true);
+  const [displayName, setDisplayName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [stats, setStats] = useState<Stats>({
-    totalVolumen: 0,
-    diasEntrenados: 0,
-    rachaActual: 0,
-    totalSesiones: 0,
+    totalVolumen: 0, diasEntrenados: 0,
+    rachaActual: 0, totalSesiones: 0,
   });
-  const [sessions, setSessions] = useState<Session[]>([]);
-  const [progress, setProgress] = useState<ExerciseProgress[]>([]);
+  const [sessions, setSessions]   = useState<Session[]>([]);
+  const [progress, setProgress]   = useState<ExerciseProgress[]>([]);
   const router = useRouter();
 
-  useEffect(() => {
-    loadAll();
-  }, []);
+  useEffect(() => { loadAll(); }, []);
 
   const loadAll = async () => {
     try {
@@ -51,6 +48,15 @@ export default function ProfileScreen() {
       if (!session?.user) return;
 
       setUserEmail(session.user.email || '');
+
+      // Cargar nombre del perfil
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('id', session.user.id)
+        .maybeSingle();
+
+      setDisplayName(profile?.display_name || '');
 
       const hace7Dias = new Date();
       hace7Dias.setDate(hace7Dias.getDate() - 7);
@@ -74,12 +80,10 @@ export default function ProfileScreen() {
           .select('session_id, exercise_name, sets, reps, weight_kg, logged_at')
           .in('session_id', sessionIds)
           .order('logged_at', { ascending: false });
-
         if (lError) throw lError;
         logsData = logs || [];
       }
 
-      // Volumen total = suma(sets * reps * weight_kg)
       const totalVolumen = logsData.reduce((acc, log) => {
         return acc + (log.sets * log.reps * log.weight_kg);
       }, 0);
@@ -95,11 +99,8 @@ export default function ProfileScreen() {
         const diaEsperado = new Date(hoy);
         diaEsperado.setDate(hoy.getDate() - i);
         const diaEsperadoStr = diaEsperado.toISOString().split('T')[0];
-        if (sortedDays[i] === diaEsperadoStr) {
-          racha++;
-        } else {
-          break;
-        }
+        if (sortedDays[i] === diaEsperadoStr) racha++;
+        else break;
       }
 
       const sessionList: Session[] = (sessionData || []).map(s => ({
@@ -130,7 +131,6 @@ export default function ProfileScreen() {
       setProgress(Array.from(exerciseMap.values()));
 
     } catch (error: any) {
-      console.error('loadAll:', error.message);
       Alert.alert('Error', 'No se pudieron cargar las estadísticas');
     } finally {
       setLoading(false);
@@ -140,11 +140,9 @@ export default function ProfileScreen() {
   const handleSignOut = () => {
     Alert.alert('Cerrar Sesión', '¿Estás seguro?', [
       { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Salir', style: 'destructive', onPress: async () => {
+      { text: 'Salir', style: 'destructive', onPress: async () => {
           await supabase.auth.signOut();
-        },
-      },
+      }},
     ]);
   };
 
@@ -155,6 +153,13 @@ export default function ProfileScreen() {
     });
   };
 
+  // ✅ Fix bug volumen — siempre en kg, sin conversión a toneladas prematura
+  const formatVolumen = (kg: number): string => {
+    if (kg >= 1_000_000) return `${(kg / 1000).toFixed(0)}t`;
+    if (kg >= 1_000)     return `${kg.toLocaleString('es-MX')} kg`;
+    return `${kg} kg`;
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -163,23 +168,32 @@ export default function ProfileScreen() {
     );
   }
 
-  const initials = userEmail?.charAt(0).toUpperCase() || '?';
+  // Inicial del nombre (o del email si aún no tiene perfil)
+  const initials = displayName
+    ? displayName.charAt(0).toUpperCase()
+    : (userEmail?.charAt(0).toUpperCase() || '?');
+
+  const nombreMostrado = displayName || userEmail;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }}>
 
-      {/* Header usuario */}
+      {/* Header */}
       <View style={styles.header}>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
         </View>
-        <Text style={styles.email} numberOfLines={1}>{userEmail}</Text>
+        {/* ✅ Mostrar nombre en lugar de email */}
+        <Text style={styles.name} numberOfLines={1}>{nombreMostrado}</Text>
+        {displayName !== '' && (
+          <Text style={styles.emailSmall} numberOfLines={1}>{userEmail}</Text>
+        )}
         <View style={styles.tagContainer}>
           <Text style={styles.tag}>Atleta</Text>
         </View>
       </View>
 
-      {/* ── Stats grid ── */}
+      {/* Stats */}
       <Text style={styles.sectionTitle}>Últimos 7 días</Text>
       <View style={styles.statsGrid}>
         <View style={styles.statCard}>
@@ -199,24 +213,19 @@ export default function ProfileScreen() {
         </View>
         <View style={styles.statCard}>
           <Ionicons name="barbell" size={22} color="#A855F7" />
-          <Text style={styles.statNumber}>
-            {stats.totalVolumen >= 1000
-              ? `${(stats.totalVolumen / 1000).toFixed(1)}t`
-              : `${stats.totalVolumen}kg`}
-          </Text>
+          {/* ✅ Usar formatVolumen en lugar del ternario anterior */}
+          <Text style={styles.statNumber}>{formatVolumen(stats.totalVolumen)}</Text>
           <Text style={styles.statLabel}>Volumen</Text>
         </View>
       </View>
 
-      {/* ── Historial de sesiones ── */}
+      {/* Historial */}
       <Text style={styles.sectionTitle}>Historial de entrenamientos</Text>
       {sessions.length === 0 ? (
         <View style={styles.emptyBox}>
           <Ionicons name="calendar-outline" size={32} color="#333" />
           <Text style={styles.emptyText}>Sin sesiones esta semana</Text>
-          <Text style={styles.emptySubtext}>
-            Completa un entrenamiento para verlo aquí
-          </Text>
+          <Text style={styles.emptySubtext}>Completa un entrenamiento para verlo aquí</Text>
         </View>
       ) : (
         sessions.map(s => (
@@ -235,7 +244,7 @@ export default function ProfileScreen() {
         ))
       )}
 
-      {/* ── Progreso por ejercicio ── */}
+      {/* Progreso por ejercicio */}
       {progress.length > 0 && (
         <>
           <Text style={styles.sectionTitle}>Último peso registrado</Text>
@@ -251,7 +260,7 @@ export default function ProfileScreen() {
         </>
       )}
 
-      {/* ── Menú ── */}
+      {/* Menú */}
       <View style={styles.menu}>
         <TouchableOpacity style={styles.menuItem} onPress={loadAll}>
           <Ionicons name="refresh-outline" size={20} color="#A855F7" />
@@ -268,7 +277,6 @@ export default function ProfileScreen() {
           <Text style={[styles.menuText, { color: '#ff4444' }]}>Cerrar Sesión</Text>
         </TouchableOpacity>
       </View>
-
     </ScrollView>
   );
 }
@@ -276,8 +284,6 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', padding: 20 },
   center: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
-
-  // Header
   header: { alignItems: 'center', marginTop: 40, marginBottom: 30 },
   avatar: {
     width: 80, height: 80, borderRadius: 40,
@@ -285,74 +291,50 @@ const styles = StyleSheet.create({
     alignItems: 'center', marginBottom: 15,
   },
   avatarText: { color: '#fff', fontSize: 32, fontWeight: 'bold' },
-  email: { color: '#fff', fontSize: 18, fontWeight: '600', maxWidth: '80%' },
+  name: { color: '#fff', fontSize: 20, fontWeight: 'bold', maxWidth: '80%' },
+  emailSmall: { color: '#555', fontSize: 13, marginTop: 2, maxWidth: '80%' },
   tagContainer: { marginTop: 8 },
   tag: {
     color: '#A855F7', fontSize: 12, fontWeight: 'bold',
     backgroundColor: '#A855F722', paddingHorizontal: 12,
     paddingVertical: 4, borderRadius: 10, overflow: 'hidden',
   },
-
-  // Secciones
   sectionTitle: {
     color: '#888', fontSize: 12, fontWeight: '700',
     textTransform: 'uppercase', letterSpacing: 1,
     marginBottom: 12, marginTop: 10,
   },
-
-  // Stats
-  statsGrid: {
-    flexDirection: 'row', flexWrap: 'wrap',
-    gap: 10, marginBottom: 25,
-  },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 25 },
   statCard: {
-    backgroundColor: '#0A0A0A',
-    width: '47%',
+    backgroundColor: '#0A0A0A', width: '47%',
     padding: 16, borderRadius: 16,
-    alignItems: 'center', borderWidth: 1, borderColor: '#1A1A1A',
-    gap: 4,
+    alignItems: 'center', borderWidth: 1, borderColor: '#1A1A1A', gap: 4,
   },
   statNumber: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   statLabel: { color: '#555', fontSize: 11, fontWeight: '600', textAlign: 'center' },
-
-  // Historial
   sessionCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#0A0A0A', borderRadius: 14,
-    padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: '#1A1A1A',
+    padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#1A1A1A',
   },
-  sessionIcon: {
-    backgroundColor: '#A855F711', padding: 8,
-    borderRadius: 10, marginRight: 12,
-  },
+  sessionIcon: { backgroundColor: '#A855F711', padding: 8, borderRadius: 10, marginRight: 12 },
   sessionInfo: { flex: 1 },
   sessionName: { color: '#fff', fontSize: 15, fontWeight: '600' },
   sessionDate: { color: '#555', fontSize: 12, marginTop: 3 },
-  sessionBadge: {
-    backgroundColor: '#1A1A1A', paddingHorizontal: 10,
-    paddingVertical: 4, borderRadius: 8,
-  },
+  sessionBadge: { backgroundColor: '#1A1A1A', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   sessionBadgeText: { color: '#888', fontSize: 11, fontWeight: '600' },
-
-  // Progreso
   progressCard: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#0A0A0A', borderRadius: 14,
-    padding: 14, marginBottom: 10,
-    borderWidth: 1, borderColor: '#1A1A1A',
+    padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#1A1A1A',
   },
   progressInfo: { flex: 1 },
   progressName: { color: '#fff', fontSize: 14, fontWeight: '600' },
   progressDate: { color: '#555', fontSize: 11, marginTop: 3 },
   progressWeight: { color: '#A855F7', fontSize: 18, fontWeight: 'bold' },
-
-  // Menú
   menu: {
-    backgroundColor: '#0A0A0A', borderRadius: 15,
-    overflow: 'hidden', borderWidth: 1,
-    borderColor: '#1A1A1A', marginTop: 15,
+    backgroundColor: '#0A0A0A', borderRadius: 15, overflow: 'hidden',
+    borderWidth: 1, borderColor: '#1A1A1A', marginTop: 15,
   },
   menuItem: {
     flexDirection: 'row', alignItems: 'center',
@@ -360,12 +342,9 @@ const styles = StyleSheet.create({
   },
   menuText: { color: '#fff', marginLeft: 15, fontSize: 16 },
   signOutItem: { borderBottomWidth: 0 },
-
-  // Empty
   emptyBox: {
-    backgroundColor: '#0A0A0A', borderRadius: 16,
-    padding: 30, alignItems: 'center',
-    borderWidth: 1, borderColor: '#1A1A1A',
+    backgroundColor: '#0A0A0A', borderRadius: 16, padding: 30,
+    alignItems: 'center', borderWidth: 1, borderColor: '#1A1A1A',
     marginBottom: 20, gap: 8,
   },
   emptyText: { color: '#555', fontSize: 15, fontWeight: '600' },

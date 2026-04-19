@@ -1,0 +1,29 @@
+{
+  "expo": {
+    "name": "MetaFit",
+    "slug": "metafit",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/MetaFit.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.equipo1.metafit"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/metafitsvg.png",
+        "backgroundColor": "#000000"
+      },
+      "package": "com.equipo1.metafit"
+    },
+    "plugins": ["expo-router"],
+    "scheme": "metafit"
+  }
+}
