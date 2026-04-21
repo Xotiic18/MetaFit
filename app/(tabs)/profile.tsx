@@ -7,6 +7,8 @@ import {
 import { supabase } from '../../services/supabase';
 import { Ionicons } from '@expo/vector-icons';
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 type Stats = {
   totalVolumen: number;
   diasEntrenados: number;
@@ -28,20 +30,26 @@ type ExerciseProgress = {
 };
 
 export default function ProfileScreen() {
-  const [loading, setLoading]           = useState(true);
-  const [displayName, setDisplayName]   = useState('');
-  const [userEmail, setUserEmail]       = useState('');
+  const [loading, setLoading]         = useState(true);
+  const [displayName, setDisplayName] = useState('');
+  const [userEmail, setUserEmail]     = useState('');
   const [stats, setStats] = useState<Stats>({
-    totalVolumen: 0, diasEntrenados: 0,
-    rachaActual: 0, totalSesiones: 0,
+    totalVolumen: 0, diasEntrenados: 0, rachaActual: 0, totalSesiones: 0,
   });
-  const [sessions, setSessions]   = useState<Session[]>([]);
-  const [progress, setProgress]   = useState<ExerciseProgress[]>([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [progress, setProgress] = useState<ExerciseProgress[]>([]);
 
   // Configuración
-  const [settingsVisible, setSettingsVisible] = useState(false);
-  const [editingName, setEditingName]         = useState('');
-  const [savingName, setSavingName]           = useState(false);
+  const [settingsVisible, setSettingsVisible]   = useState(false);
+  const [editingName, setEditingName]           = useState('');
+  const [savingName, setSavingName]             = useState(false);
+  const [newEmail, setNewEmail]                 = useState('');
+  const [savingEmail, setSavingEmail]           = useState(false);
+  const [newPassword, setNewPassword]           = useState('');
+  const [confirmPassword, setConfirmPassword]   = useState('');
+  const [savingPassword, setSavingPassword]     = useState(false);
+  const [showNewPass, setShowNewPass]           = useState(false);
+  const [showConfirmPass, setShowConfirmPass]   = useState(false);
 
   useEffect(() => { loadAll(); }, []);
 
@@ -87,9 +95,8 @@ export default function ProfileScreen() {
         logsData = logs || [];
       }
 
-      const totalVolumen = logsData.reduce((acc, log) => {
-        return acc + (log.sets * log.reps * log.weight_kg);
-      }, 0);
+      const totalVolumen = logsData.reduce((acc, log) =>
+        acc + (log.sets * log.reps * log.weight_kg), 0);
 
       const diasUnicos = new Set(
         (sessionData || []).map(s => s.completed_at.split('T')[0])
@@ -101,8 +108,7 @@ export default function ProfileScreen() {
       for (let i = 0; i < sortedDays.length; i++) {
         const diaEsperado = new Date(hoy);
         diaEsperado.setDate(hoy.getDate() - i);
-        const diaEsperadoStr = diaEsperado.toISOString().split('T')[0];
-        if (sortedDays[i] === diaEsperadoStr) racha++;
+        if (sortedDays[i] === diaEsperado.toISOString().split('T')[0]) racha++;
         else break;
       }
 
@@ -133,7 +139,7 @@ export default function ProfileScreen() {
       setSessions(sessionList);
       setProgress(Array.from(exerciseMap.values()));
 
-    } catch (error: any) {
+    } catch {
       Alert.alert('Error', 'No se pudieron cargar las estadísticas');
     } finally {
       setLoading(false);
@@ -146,14 +152,11 @@ export default function ProfileScreen() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
-
       await supabase
         .from('profiles')
         .update({ display_name: editingName.trim() })
         .eq('id', session.user.id);
-
       setDisplayName(editingName.trim());
-      setSettingsVisible(false);
       Alert.alert('✓ Guardado', 'Tu nombre fue actualizado.');
     } catch {
       Alert.alert('Error', 'No se pudo guardar el nombre.');
@@ -162,14 +165,60 @@ export default function ProfileScreen() {
     }
   };
 
+  const changeEmail = async () => {
+    if (!newEmail.trim()) return;
+    if (!EMAIL_REGEX.test(newEmail)) {
+      Alert.alert('Error', 'El correo no tiene un formato válido.');
+      return;
+    }
+    setSavingEmail(true);
+    try {
+      const { error } = await supabase.auth.updateUser({
+        email: newEmail.trim().toLowerCase(),
+      });
+      if (error) throw error;
+      Alert.alert(
+        'Correo enviado',
+        'Revisa tu bandeja de entrada y confirma el cambio de correo.',
+        [{ text: 'OK', onPress: () => setNewEmail('') }]
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setSavingEmail(false);
+    }
+  };
+
+  const changePassword = async () => {
+    if (!newPassword.trim()) return;
+    if (newPassword.length < 6) {
+      Alert.alert('Error', 'La contraseña debe tener al menos 6 caracteres.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      Alert.alert('Error', 'Las contraseñas no coinciden.');
+      return;
+    }
+    setSavingPassword(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setNewPassword('');
+      setConfirmPassword('');
+      Alert.alert('✓ Listo', 'Tu contraseña fue actualizada.');
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setSavingPassword(false);
+    }
+  };
+
   const handleSignOut = () => {
     Alert.alert('Cerrar Sesión', '¿Estás seguro?', [
       { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Salir', style: 'destructive', onPress: async () => {
+      { text: 'Salir', style: 'destructive', onPress: async () => {
           await supabase.auth.signOut();
-        },
-      },
+      }},
     ]);
   };
 
@@ -203,7 +252,7 @@ export default function ProfileScreen() {
     <>
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 50 }}>
 
-        {/* ── Header usuario ── */}
+        {/* ── Header ── */}
         <View style={styles.header}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
@@ -269,7 +318,7 @@ export default function ProfileScreen() {
           ))
         )}
 
-        {/* ── Progreso por ejercicio ── */}
+        {/* ── Progreso ── */}
         {progress.length > 0 && (
           <>
             <Text style={styles.sectionTitle}>Último peso registrado</Text>
@@ -292,19 +341,14 @@ export default function ProfileScreen() {
             <Text style={styles.menuText}>Actualizar</Text>
             <Ionicons name="chevron-forward" size={16} color="#333" style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
-
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => {
-              setEditingName(displayName);
-              setSettingsVisible(true);
-            }}
+            onPress={() => { setEditingName(displayName); setSettingsVisible(true); }}
           >
             <Ionicons name="settings-outline" size={20} color="#fff" />
             <Text style={styles.menuText}>Configuración</Text>
             <Ionicons name="chevron-forward" size={16} color="#333" style={{ marginLeft: 'auto' }} />
           </TouchableOpacity>
-
           <TouchableOpacity style={[styles.menuItem, styles.signOutItem]} onPress={handleSignOut}>
             <Ionicons name="log-out-outline" size={20} color="#ff4444" />
             <Text style={[styles.menuText, { color: '#ff4444' }]}>Cerrar Sesión</Text>
@@ -321,8 +365,6 @@ export default function ProfileScreen() {
         onRequestClose={() => setSettingsVisible(false)}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: '#000' }}>
-
-          {/* Header modal */}
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Configuración</Text>
             <TouchableOpacity onPress={() => setSettingsVisible(false)} hitSlop={10}>
@@ -330,9 +372,9 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          <ScrollView contentContainerStyle={{ padding: 20 }}>
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 50 }}>
 
-            {/* Editar nombre */}
+            {/* ── Nombre ── */}
             <Text style={styles.sectionTitle}>Perfil</Text>
             <View style={styles.settingsCard}>
               <Text style={styles.settingsLabel}>Nombre de usuario</Text>
@@ -346,18 +388,97 @@ export default function ProfileScreen() {
                 maxLength={40}
               />
               <TouchableOpacity
-                style={[styles.saveBtn, savingName && { opacity: 0.6 }]}
+                style={[styles.actionBtn, savingName && styles.actionBtnDisabled]}
                 onPress={saveDisplayName}
                 disabled={savingName}
               >
                 {savingName
-                  ? <ActivityIndicator color="#fff" />
-                  : <Text style={styles.saveBtnText}>Guardar nombre</Text>
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.actionBtnText}>Guardar nombre</Text>
                 }
               </TouchableOpacity>
             </View>
 
-            {/* Info de la app */}
+            {/* ── Correo ── */}
+            <Text style={styles.sectionTitle}>Seguridad</Text>
+            <View style={styles.settingsCard}>
+              <Text style={styles.settingsLabel}>Cambiar correo electrónico</Text>
+              <Text style={styles.settingsHint}>Actual: {userEmail}</Text>
+              <View style={styles.inputRow}>
+                <Ionicons name="mail-outline" size={18} color="#555" style={{ marginRight: 8 }} />
+                <TextInput
+                  style={styles.settingsInputFlex}
+                  value={newEmail}
+                  onChangeText={setNewEmail}
+                  placeholder="Nuevo correo"
+                  placeholderTextColor="#555"
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  autoCorrect={false}
+                />
+              </View>
+              <TouchableOpacity
+                style={[styles.actionBtn, savingEmail && styles.actionBtnDisabled]}
+                onPress={changeEmail}
+                disabled={savingEmail}
+              >
+                {savingEmail
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.actionBtnText}>Actualizar correo</Text>
+                }
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Contraseña ── */}
+            <View style={styles.settingsCard}>
+              <Text style={styles.settingsLabel}>Cambiar contraseña</Text>
+              <View style={styles.inputRow}>
+                <Ionicons name="lock-closed-outline" size={18} color="#555" style={{ marginRight: 8 }} />
+                <TextInput
+                  style={styles.settingsInputFlex}
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder="Nueva contraseña"
+                  placeholderTextColor="#555"
+                  secureTextEntry={!showNewPass}
+                />
+                <TouchableOpacity onPress={() => setShowNewPass(p => !p)} hitSlop={8}>
+                  <Ionicons
+                    name={showNewPass ? 'eye-off-outline' : 'eye-outline'}
+                    size={18} color="#555"
+                  />
+                </TouchableOpacity>
+              </View>
+              <View style={[styles.inputRow, { marginTop: 12 }]}>
+                <Ionicons name="lock-closed-outline" size={18} color="#555" style={{ marginRight: 8 }} />
+                <TextInput
+                  style={styles.settingsInputFlex}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirmar contraseña"
+                  placeholderTextColor="#555"
+                  secureTextEntry={!showConfirmPass}
+                />
+                <TouchableOpacity onPress={() => setShowConfirmPass(p => !p)} hitSlop={8}>
+                  <Ionicons
+                    name={showConfirmPass ? 'eye-off-outline' : 'eye-outline'}
+                    size={18} color="#555"
+                  />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={[styles.actionBtn, savingPassword && styles.actionBtnDisabled]}
+                onPress={changePassword}
+                disabled={savingPassword}
+              >
+                {savingPassword
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.actionBtnText}>Actualizar contraseña</Text>
+                }
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Acerca de ── */}
             <Text style={styles.sectionTitle}>Acerca de</Text>
             <View style={styles.aboutCard}>
               <View style={styles.aboutRow}>
@@ -381,7 +502,6 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', padding: 20 },
   center: { flex: 1, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' },
 
-  // Header
   header: { alignItems: 'center', marginTop: 40, marginBottom: 30 },
   avatar: {
     width: 80, height: 80, borderRadius: 40,
@@ -404,17 +524,15 @@ const styles = StyleSheet.create({
     marginBottom: 12, marginTop: 10,
   },
 
-  // Stats
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 25 },
   statCard: {
-    backgroundColor: '#0A0A0A', width: '47%',
-    padding: 16, borderRadius: 16,
-    alignItems: 'center', borderWidth: 1, borderColor: '#1A1A1A', gap: 4,
+    backgroundColor: '#0A0A0A', width: '47%', padding: 16,
+    borderRadius: 16, alignItems: 'center',
+    borderWidth: 1, borderColor: '#1A1A1A', gap: 4,
   },
   statNumber: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   statLabel: { color: '#555', fontSize: 11, fontWeight: '600', textAlign: 'center' },
 
-  // Historial
   sessionCard: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: '#0A0A0A', borderRadius: 14,
@@ -427,7 +545,6 @@ const styles = StyleSheet.create({
   sessionBadge: { backgroundColor: '#1A1A1A', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
   sessionBadgeText: { color: '#888', fontSize: 11, fontWeight: '600' },
 
-  // Progreso
   progressCard: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     backgroundColor: '#0A0A0A', borderRadius: 14,
@@ -438,7 +555,6 @@ const styles = StyleSheet.create({
   progressDate: { color: '#555', fontSize: 11, marginTop: 3 },
   progressWeight: { color: '#A855F7', fontSize: 18, fontWeight: 'bold' },
 
-  // Menú
   menu: {
     backgroundColor: '#0A0A0A', borderRadius: 15, overflow: 'hidden',
     borderWidth: 1, borderColor: '#1A1A1A', marginTop: 15,
@@ -450,7 +566,6 @@ const styles = StyleSheet.create({
   menuText: { color: '#fff', marginLeft: 15, fontSize: 16 },
   signOutItem: { borderBottomWidth: 0 },
 
-  // Empty
   emptyBox: {
     backgroundColor: '#0A0A0A', borderRadius: 16, padding: 30,
     alignItems: 'center', borderWidth: 1, borderColor: '#1A1A1A',
@@ -459,7 +574,7 @@ const styles = StyleSheet.create({
   emptyText: { color: '#555', fontSize: 15, fontWeight: '600' },
   emptySubtext: { color: '#333', fontSize: 12, textAlign: 'center' },
 
-  // Modal configuración
+  // Modal
   modalHeader: {
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', padding: 20,
@@ -470,22 +585,28 @@ const styles = StyleSheet.create({
   settingsCard: {
     backgroundColor: '#0A0A0A', borderRadius: 14,
     borderWidth: 1, borderColor: '#1A1A1A',
-    padding: 16, marginBottom: 20,
+    padding: 16, marginBottom: 16,
   },
   settingsLabel: {
-    color: '#888', fontSize: 12, fontWeight: '700',
-    textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10,
+    color: '#fff', fontSize: 15, fontWeight: '600', marginBottom: 4,
   },
+  settingsHint: { color: '#555', fontSize: 12, marginBottom: 12 },
   settingsInput: {
     color: '#fff', fontSize: 16,
-    borderBottomWidth: 1, borderBottomColor: '#A855F7',
-    paddingBottom: 8,
+    borderBottomWidth: 1, borderBottomColor: '#A855F7', paddingBottom: 8,
   },
-  saveBtn: {
+  inputRow: {
+    flexDirection: 'row', alignItems: 'center',
+    borderBottomWidth: 1, borderBottomColor: '#2A2A2A', paddingBottom: 8,
+  },
+  settingsInputFlex: { flex: 1, color: '#fff', fontSize: 15 },
+
+  actionBtn: {
     backgroundColor: '#A855F7', borderRadius: 12,
-    padding: 14, alignItems: 'center', marginTop: 16,
+    padding: 13, alignItems: 'center', marginTop: 16,
   },
-  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  actionBtnDisabled: { opacity: 0.6 },
+  actionBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
 
   aboutCard: {
     backgroundColor: '#0A0A0A', borderRadius: 14,

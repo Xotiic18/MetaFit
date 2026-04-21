@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#000000"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.equipo1.metafit"
@@ -23,7 +25,15 @@
       },
       "package": "com.equipo1.metafit"
     },
-    "plugins": ["expo-router"],
-    "scheme": "metafit"
+    "plugins": [
+      "expo-router"
+    ],
+    "scheme": "metafit",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "060dd27e-4d8b-4a8e-b3fc-783aa3863c3d"
+      }
+    }
   }
 }

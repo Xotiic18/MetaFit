@@ -6,16 +6,17 @@ import {
 import { supabase } from '../../services/supabase';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import MetaFitLogo from '../../assets/images/metafitsvg.svg';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginScreen() {
-  const [email, setEmail]               = useState('');
-  const [password, setPassword]         = useState('');
-  const [displayName, setDisplayName]   = useState('');
-  const [loading, setLoading]           = useState(false);
+  const [email, setEmail]                 = useState('');
+  const [password, setPassword]           = useState('');
+  const [displayName, setDisplayName]     = useState('');
+  const [loading, setLoading]             = useState(false);
   const [isRegistering, setIsRegistering] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword]   = useState(false);
   const router = useRouter();
 
   const validate = (): string | null => {
@@ -43,7 +44,6 @@ export default function LoginScreen() {
         });
         if (error) throw error;
 
-        // Crear perfil con nombre
         if (data.user) {
           await supabase.from('profiles').insert([{
             id: data.user.id,
@@ -70,7 +70,7 @@ export default function LoginScreen() {
       }
     } catch (error: any) {
       const msg =
-        error.message.includes('Invalid login')    ? 'Correo o contraseña incorrectos.' :
+        error.message.includes('Invalid login')      ? 'Correo o contraseña incorrectos.' :
         error.message.includes('Email not confirmed') ? 'Confirma tu correo antes de iniciar sesión.' :
         error.message.includes('already registered')  ? 'Este correo ya tiene una cuenta registrada.' :
         error.message;
@@ -96,7 +96,9 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <Ionicons name="barbell" size={72} color="#A855F7" style={styles.logo} />
+        {/* ── Logo SVG ── */}
+        <MetaFitLogo width={110} height={110} />
+
         <Text style={styles.title}>MetaFit</Text>
         <Text style={styles.subtitle}>
           {isRegistering ? 'Crea tu cuenta' : 'Bienvenido de nuevo'}
@@ -184,8 +186,7 @@ const styles = StyleSheet.create({
     flexGrow: 1, justifyContent: 'center',
     padding: 30, alignItems: 'center',
   },
-  logo: { marginBottom: 10 },
-  title: { color: '#fff', fontSize: 36, fontWeight: 'bold', marginBottom: 5 },
+  title: { color: '#fff', fontSize: 36, fontWeight: 'bold', marginBottom: 5, marginTop: 16 },
   subtitle: { color: '#A855F7', fontSize: 16, marginBottom: 35 },
   inputContainer: {
     flexDirection: 'row', alignItems: 'center',
