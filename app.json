@@ -20,7 +20,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/metafitsvg.png",
+        "foregroundImage": "./assets/images/metafit-no-background.png",
         "backgroundColor": "#000000"
       },
       "package": "com.equipo1.metafit"

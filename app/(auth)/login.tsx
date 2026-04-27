@@ -97,7 +97,10 @@ export default function LoginScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Logo SVG ── */}
-        <MetaFitLogo width={110} height={110} />
+        <View style={{ marginTop: 20, marginBottom: 0 }}>
+
+        <MetaFitLogo width={90} height={90} />
+        </View>
 
         <Text style={styles.title}>MetaFit</Text>
         <Text style={styles.subtitle}>

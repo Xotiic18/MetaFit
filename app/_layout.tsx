@@ -3,6 +3,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import { supabase } from '../services/supabase';
 import { Session } from '@supabase/supabase-js';
 import { ActivityIndicator, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
@@ -11,7 +12,6 @@ export default function RootLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    // getSession() es síncrono desde cache — sin round-trip de red
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setInitialized(true);
@@ -27,7 +27,6 @@ export default function RootLayout() {
   useEffect(() => {
     if (!initialized) return;
     const inAuthGroup = segments[0] === '(auth)';
-
     if (!session && !inAuthGroup) {
       router.replace('/(auth)/login');
     } else if (session && inAuthGroup) {
@@ -44,9 +43,11 @@ export default function RootLayout() {
   }
 
   return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
-      <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
-    </Stack>
+    <SafeAreaProvider>
+      <Stack screenOptions={{ headerShown: false }}>
+        <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
+        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+      </Stack>
+    </SafeAreaProvider>
   );
 }
