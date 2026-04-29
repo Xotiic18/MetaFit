@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   Alert, ActivityIndicator
@@ -7,62 +7,59 @@ import { supabase } from '../../services/supabase';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
-type Template = {
+type BaseRoutine = {
   id: string;
   name: string;
   description: string;
   icon: string;
-  exercises: string[];
+  base_routine_exercises: {
+    exercise_name: string;
+    muscle_group: string;
+    position: number;
+    sets: number;
+    reps: number;
+    rest_seconds: number;
+  }[];
 };
 
-const PRESET_TEMPLATES: Template[] = [
-  {
-    id: 't1',
-    name: 'Push (Empuje)',
-    description: 'Pecho, Hombro y Tríceps',
-    icon: 'arrow-up-circle-outline',
-    exercises: ['Press Banca', 'Press Inclinado', 'Press Militar', 'Elevaciones Laterales', 'Extensión Tríceps Polea'],
-  },
-  {
-    id: 't2',
-    name: 'Pull (Tracción)',
-    description: 'Espalda y Bíceps',
-    icon: 'arrow-down-circle-outline',
-    exercises: ['Dominadas', 'Remo con Barra', 'Jalón al Pecho', 'Curl Bíceps Barra', 'Curl Martillo'],
-  },
-  {
-    id: 't3',
-    name: 'Legs (Pierna)',
-    description: 'Cuádriceps, Isquios y Pantorrilla',
-    icon: 'body-outline',
-    exercises: ['Sentadilla', 'Prensa de Pierna', 'Curl Femoral', 'Extensión de Cuádriceps', 'Elevación de Talones'],
-  },
-  {
-    id: 't4',
-    name: 'Upper Body',
-    description: 'Torso enfocando volumen acumulado',
-    icon: 'fitness-outline',
-    exercises: ['Press Banca', 'Remo con Mancuerna', 'Press Militar', 'Curl Bíceps', 'Extensión Tríceps'],
-  },
-  {
-    id: 't5',
-    name: 'Lower Body',
-    description: 'Tren inferior enfoque fuerza',
-    icon: 'barbell-outline',
-    exercises: ['Sentadilla', 'Peso Muerto Rumano', 'Zancadas', 'Prensa de Pierna', 'Curl Femoral Tumbado'],
-  },
-];
-
 export default function WorkoutScreen() {
-  const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [templates, setTemplates]           = useState<BaseRoutine[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [loadingId, setLoadingId]           = useState<string | null>(null);
   const router = useRouter();
 
-  const handleSelectTemplate = async (template: Template) => {
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('base_routines')
+          .select(`
+            id, name, description, icon,
+            base_routine_exercises (
+              exercise_name, muscle_group, position, sets, reps, rest_seconds
+            )
+          `)
+          .order('created_at', { ascending: true });
+
+        if (error) throw error;
+        setTemplates(data || []);
+      } catch (error: any) {
+        Alert.alert('Error', 'No se pudieron cargar las plantillas');
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+
+    fetchTemplates();
+  }, []);
+
+  const handleSelectTemplate = async (template: BaseRoutine) => {
     setLoadingId(template.id);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) throw new Error('No hay sesión activa');
 
+      // 1. Crear la rutina
       const { data: routine, error: rError } = await supabase
         .from('routines')
         .insert([{ name: template.name, user_id: session.user.id }])
@@ -70,36 +67,37 @@ export default function WorkoutScreen() {
         .single();
       if (rError) throw rError;
 
-      const exerciseInserts = template.exercises.map(name => ({ name }));
-      const { data: createdExercises, error: exError } = await supabase
-        .from('exercises')
-        .insert(exerciseInserts)
-        .select('id, name');
-      if (exError) throw exError;
+      // 2. Ordenar ejercicios por posición
+      const exercises = (template.base_routine_exercises || [])
+        .sort((a, b) => a.position - b.position);
 
-      const links = createdExercises.map((ex, index) => ({
-        routine_id: routine.id,
-        exercise_id: ex.id,
-        position: index,
-        sets: 3,
-        reps: 10,
-        weight_kg: 0,       
-        rest_seconds: 90,
-      }));
+      if (exercises.length > 0) {
+        // 3. Insertar ejercicios en tabla exercises
+        const exerciseInserts = exercises.map(ex => ({ name: ex.exercise_name }));
+        const { data: createdExercises, error: exError } = await supabase
+          .from('exercises')
+          .insert(exerciseInserts)
+          .select('id, name');
+        if (exError) throw exError;
 
-      const { data: insertedLinks, error: linkError } = await supabase
-        .from('routine_exercises')
-        .insert(links)
-        .select();
+        // 4. Vincular ejercicios a la rutina
+        const links = createdExercises.map((ex, index) => ({
+          routine_id:   routine.id,
+          exercise_id:  ex.id,
+          position:     index,
+          sets:         exercises[index]?.sets         ?? 3,
+          reps:         exercises[index]?.reps         ?? 10,
+          weight_kg:    0,
+          rest_seconds: exercises[index]?.rest_seconds ?? 90,
+        }));
 
-        console.log('Links insertados:', insertedLinks);
-        console.log('Error de links:', linkError);
-      if (linkError) throw linkError;
+        const { error: linkError } = await supabase
+          .from('routine_exercises')
+          .insert(links);
+        if (linkError) throw linkError;
+      }
 
-      if (!insertedLinks || insertedLinks.length === 0) {
-      throw new Error(`RLS bloqueó el insert. ¿routine_id pertenece al usuario? routine_id: ${routine.id}`);
-}
-
+      // 5. Navegar a la rutina creada
       router.push(`/(tabs)/${routine.id}`);
 
     } catch (error: any) {
@@ -109,17 +107,35 @@ export default function WorkoutScreen() {
     }
   };
 
+  if (loadingTemplates) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#A855F7" />
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.header}>Nueva Rutina</Text>
       <Text style={styles.subHeader}>Elige una plantilla para empezar:</Text>
 
       <FlatList
-        data={PRESET_TEMPLATES}
+        data={templates}
         keyExtractor={(item) => item.id}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Ionicons name="barbell-outline" size={40} color="#333" />
+            <Text style={styles.emptyText}>Sin plantillas disponibles</Text>
+            <Text style={styles.emptySubtext}>
+              El administrador aún no ha creado plantillas
+            </Text>
+          </View>
+        }
         renderItem={({ item }) => {
-          const isLoading = loadingId === item.id;
+          const isLoading  = loadingId === item.id;
           const isDisabled = loadingId !== null;
+          const exCount    = item.base_routine_exercises?.length ?? 0;
 
           return (
             <TouchableOpacity
@@ -134,7 +150,7 @@ export default function WorkoutScreen() {
                 <Text style={styles.templateName}>{item.name}</Text>
                 <Text style={styles.templateDesc}>{item.description}</Text>
                 <Text style={styles.exerciseCount}>
-                  {item.exercises.length} ejercicios incluidos
+                  {exCount} ejercicio{exCount !== 1 ? 's' : ''} incluido{exCount !== 1 ? 's' : ''}
                 </Text>
               </View>
               {isLoading
@@ -150,17 +166,43 @@ export default function WorkoutScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#000', paddingHorizontal: 20, paddingTop: 60 },
-  header: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
-  subHeader: { color: '#666', fontSize: 16, marginBottom: 20, marginTop: 5 },
+  container: {
+    flex: 1, backgroundColor: '#000',
+    paddingHorizontal: 20, paddingTop: 60,
+  },
+  center: {
+    flex: 1, backgroundColor: '#000',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  header: {
+    color: '#fff', fontSize: 28, fontWeight: 'bold',
+  },
+  subHeader: {
+    color: '#666', fontSize: 16, marginBottom: 20, marginTop: 5,
+  },
   templateCard: {
     backgroundColor: '#111', padding: 18, borderRadius: 15,
     marginBottom: 12, flexDirection: 'row', alignItems: 'center',
     borderWidth: 1, borderColor: '#222',
   },
-  iconContainer: { backgroundColor: '#1A1A1A', padding: 10, borderRadius: 10, marginRight: 15 },
+  iconContainer: {
+    backgroundColor: '#1A1A1A', padding: 10,
+    borderRadius: 10, marginRight: 15,
+  },
   textContainer: { flex: 1 },
   templateName: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
   templateDesc: { color: '#666', fontSize: 13, marginTop: 2 },
-  exerciseCount: { color: '#A855F766', fontSize: 11, marginTop: 4, fontWeight: '600' },
+  exerciseCount: {
+    color: '#A855F766', fontSize: 11,
+    marginTop: 4, fontWeight: '600',
+  },
+  emptyContainer: {
+    alignItems: 'center', paddingTop: 80, gap: 10,
+  },
+  emptyText: {
+    color: '#555', fontSize: 16, fontWeight: '600',
+  },
+  emptySubtext: {
+    color: '#333', fontSize: 13, textAlign: 'center',
+  },
 });
